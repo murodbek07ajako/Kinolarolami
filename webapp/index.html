@@ -2,49 +2,33 @@
 <html lang="uz"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Kinolar</title>
+<title>Kinolar olami</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{--bg:var(--tg-theme-bg-color,#fff);--fg:var(--tg-theme-text-color,#111);--card:var(--tg-theme-secondary-bg-color,#f1f1f4);--btn:var(--tg-theme-button-color,#2481cc);--btnt:var(--tg-theme-button-text-color,#fff);--hint:var(--tg-theme-hint-color,#888)}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;padding:12px}
-input{width:100%;padding:12px;border:0;border-radius:12px;background:var(--card);color:var(--fg);font-size:16px}
-.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 0}
-.chip{padding:7px 14px;border-radius:20px;background:var(--card);white-space:nowrap;font-size:14px}
-.chip.on{background:var(--btn);color:var(--btnt)}
-.card{display:flex;justify-content:space-between;align-items:center;background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px}
-.t{font-weight:600}.m{color:var(--hint);font-size:13px;margin-top:3px}
-.b{border:0;border-radius:10px;padding:9px 12px;background:var(--btn);color:var(--btnt);font-size:14px}
-.fav{background:none;border:0;font-size:22px}
-.empty{text-align:center;color:var(--hint);padding:30px}
-</style></head><body>
-<input id="s" placeholder="🔎 Kino nomini yozing...">
-<div class="chips" id="chips"></div>
-<div id="list"></div>
-<script>
-const tg=Telegram.WebApp;tg.ready();tg.expand();
-let genre="",favOnly=false,timer;
-const favs=new Set(JSON.parse(localStorage.getItem("favs")||"[]"));
-const save=()=>localStorage.setItem("favs",JSON.stringify([...favs]));
-async function load(){
-  const r=await fetch(`/api/movies?q=${encodeURIComponent(s.value)}&genre=${encodeURIComponent(genre)}`);
-  const d=await r.json();
-  chips.innerHTML=[["","Hammasi"],["__fav","❤️ Sevimli"],...d.genres.map(g=>[g,g])]
-    .map(([v,l])=>`<div class="chip ${(v==="__fav"?favOnly:(!favOnly&&v===genre))?"on":""}" data-v="${v}">${l}</div>`).join("");
-  let ms=d.movies.filter(m=>!favOnly||favs.has(m.code));
-  list.innerHTML=ms.length?ms.map(m=>`<div class="card"><div><div class="t">${m.title}</div>
-    <div class="m">${m.year} · ${m.genre} · ⭐${m.rating||"—"} · 👁${m.views}</div></div>
-    <div><button class="fav" data-f="${m.code}">${favs.has(m.code)?"❤️":"🤍"}</button>
-    <button class="b" data-c="${m.code}">▶ Ko'rish</button></div></div>`).join(""):`<div class="empty">Hech narsa topilmadi</div>`;
-}
-s.oninput=()=>{clearTimeout(timer);timer=setTimeout(load,300)};
-chips.onclick=e=>{const v=e.target.dataset.v;if(v===undefined)return;
-  favOnly=v==="__fav";genre=favOnly?"":v;load()};
-list.onclick=async e=>{
-  const f=e.target.dataset.f,c=e.target.dataset.c;
-  if(f){const k=+f;favs.has(k)?favs.delete(k):favs.add(k);save();load()}
-  if(c){const r=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({initData:tg.initData,code:c})});const d=await r.json();
-    if(d.ok)tg.close();else tg.showAlert(d.error==="sub"?"Avval kanallarga obuna bo'ling":"Xatolik")}
-};
-load();
-</script></body></html>
+:root{--bg:#0f0f17;--card:#1b1b28;--fg:#f2f2f7;--hint:#9a9ab0;--acc:#7c5cff;--acc2:#ff5c8a;--ok:#2ecc71;--bad:#ff4d4d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;padding:14px 14px 90px}
+h1{margin:4px 0 12px;font-size:24px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;color:transparent}
+input,textarea{width:100%;padding:13px 14px;border:1px solid #2a2a3d;border-radius:14px;background:var(--card);color:var(--fg);font-size:15px;font-family:inherit;margin-bottom:10px}
+textarea{min-height:80px;resize:vertical}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;scrollbar-width:none}
+.chip{padding:8px 15px;border-radius:20px;background:var(--card);white-space:nowrap;font-size:14px;color:var(--hint)}
+.chip.on{background:linear-gradient(90deg,var(--acc),var(--acc2));color:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{min-width:0}
+.poster{position:relative;aspect-ratio:2/3;border-radius:16px;overflow:hidden;background:linear-gradient(160deg,#2a2150,#4a1f3d);display:flex;align-items:center;justify-content:center;font-size:42px}
+.poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.rt{position:absolute;top:8px;right:8px;background:#000a;padding:3px 8px;border-radius:10px;font-size:12px}
+.tag{position:absolute;top:8px;left:8px;background:var(--bad);padding:3px 8px;border-radius:10px;font-size:11px}
+.ct{font-weight:600;margin-top:7px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm{color:var(--hint);font-size:12px;margin-top:2px}
+.nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#14141fee;backdrop-filter:blur(12px);padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid #2a2a3d}
+.nav div{flex:1;text-align:center;padding:8px;border-radius:12px;font-size:13px;color:var(--hint)}
+.nav div.on{color:#fff;background:var(--card)}
+.nav span{display:block;font-size:20px}
+.ov{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;z-index:9}
+.ov.show{display:flex}
+.sheet{background:var(--bg);width:100%;max-height:92vh;overflow-y:auto;border-radius:24px 24px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+.dh{display:flex;gap:14px;margin-bottom:12px}
+.dh .poster{width:110px;flex:none;font-size:30px}
+h2{margin:0 0 6px;font-size:20px}
