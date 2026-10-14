@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Kino Katalog</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:#0a0c13;--bg2:#10131f;--card:#151a2b;--line:#222a42;--text:#f4f6fc;--muted:#8f98b5;--a1:#ff4d6d;--a2:#ff9248;--grad:linear-gradient(135deg,var(--a1),var(--a2))}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overscroll-behavior:none}
+body{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+.top{position:sticky;top:0;z-index:20;background:linear-gradient(var(--bg) 85%,transparent);padding:14px 14px 2px}
+.hi{font-size:21px;font-weight:800;letter-spacing:-.3px}
+.hi b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.search{display:flex;align-items:center;gap:8px;margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:0 12px;height:46px;transition:border-color .2s}
+.search:focus-within{border-color:var(--a1)}
+.search svg{flex:none;opacity:.55}
+.search input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);font-size:15px;height:100%}
+.search input::placeholder{color:var(--muted)}
+.search input::-webkit-search-cancel-button{display:none}
+#clr{flex:none;width:24px;height:24px;border-radius:50%;background:var(--line);font-size:11px}
+.tabs,.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar,.chips::-webkit-scrollbar{display:none}
+.tabs{margin-top:12px}
+.tabs button{flex:none;padding:8px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-weight:600;font-size:13px;color:var(--muted);transition:.2s}
+.tabs button.on{background:var(--grad);border-color:transparent;color:#fff}
+.chips{margin:10px 0 6px;padding-bottom:4px}
+.chips:empty{display:none}
+.chips button{flex:none;padding:5px 12px;border-radius:99px;border:1px solid var(--line);font-size:12.5px;color:var(--muted);transition:.2s}
+.chips button.on{border-color:var(--a1);color:var(--text);background:rgba(255,77,109,.14)}
+main{padding:4px 14px}
+.count{color:var(--muted);font-size:12.5px;margin:6px 2px 10px;min-height:1em}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:520px){.grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:760px){.grid{grid-template-columns:repeat(4,1fr)}}
+.card{background:var(--card);border-radius:16px;overflow:hidden;border:1px solid var(--line);cursor:pointer;transition:transform .15s;animation:in .4s both}
+.card:active{transform:scale(.97)}
+@keyframes in{from{opacity:0;transform:translateY(10px)}}
+.poster{position:relative;aspect-ratio:2/3;background:var(--bg2);overflow:hidden}
+.poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .4s}
+.poster img.ok{opacity:1}
+.ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:46px;font-weight:800;color:rgba(255,255,255,.8)}
+.shade{position:absolute;left:0;right:0;bottom:0;height:45%;background:linear-gradient(transparent,rgba(10,12,19,.9))}
+.badge{position:absolute;top:8px;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;background:rgba(10,12,19,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.badge.q{left:8px;color:#ffd166}.badge.y{right:8px}
+.views{position:absolute;left:8px;bottom:8px;font-size:11.5px;font-weight:600}
+.meta{padding:9px 10px 11px}
+.t{font-weight:700;font-size:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.8em}
+.g{color:var(--muted);font-size:12px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1.4em}
+.sk{aspect-ratio:2/3.85;border-radius:16px;background:linear-gradient(90deg,var(--card) 25%,#1e2439 37%,var(--card) 63%);background-size:400% 100%;animation:sh 1.3s infinite}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:0 0}}
+.empty{text-align:center;color:var(--muted);padding:56px 20px}
+.empty .e{font-size:50px;margin-bottom:8px}
+.empty b{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
+#sentinel{height:1px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
+.overlay.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;max-height:92vh;overflow:auto;background:var(--bg2);border-radius:24px 24px 0 0;border-top:1px solid var(--line);transform:translateY(105%);transition:transform .34s cubic-bezier(.2,.8,.2,1);padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+.sheet.on{transform:none}
+.grab{width:42px;height:4px;border-radius:9px;background:var(--line);margin:10px auto 8px}
+.hero{display:flex;gap:14px;padding:6px 16px}
+.hero .poster{width:118px;flex:none;border-radius:14px}
+.hero .info{min-width:0;flex:1}
+.hero h2{margin:2px 0 10px;font-size:20px;line-height:1.2;letter-spacing:-.2px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:3px 9px;border-radius:8px;background:var(--card);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.rows{padding:6px 16px 0;color:var(--muted);font-size:13.5px}
+.rows div{margin:3px 0}.rows b{color:var(--text);font-weight:600}
+.desc{padding:10px 16px 0;font-size:14px;color:#c9cfe3;white-space:pre-line}
+.acts{display:flex;gap:10px;padding:16px 16px 0}
+.btn{height:52px;border-radius:15px;font-weight:700;font-size:15.5px}
+.btn.main{flex:1;background:var(--grad);color:#fff;box-shadow:0 8px 22px rgba(255,77,109,.28)}
+.btn.main:disabled{opacity:.65}
+.btn.fav{width:56px;background:var(--card);border:1px solid var(--line);font-size:21px}
+.loader{padding:60px;text-align:center;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));transform:translate(-50%,30px);background:#fff;color:#111;padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:88vw;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="hi" id="hi">🎬 <b>Kino Katalog</b></div>
+  <div class="sub">Sevimli kinolaringizni toping</div>
+  <label class="search">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Kino nomi, janr yoki yil..." autocomplete="off" enterkeyhint="search">
+    <button id="clr" hidden aria-label="Tozalash">✕</button>
+  </label>
+  <div class="tabs" id="tabs">
+    <button data-sort="new" class="on">🆕 Yangi</button>
+    <button data-sort="top">🔥 Top</button>
+    <button data-sort="year">📅 Yil bo'yicha</button>
+    <button data-sort="fav">⭐ Saralangan</button>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<main>
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" hidden></div>
+  <div id="sentinel"></div>
+</main>
+
+<div class="overlay" id="ov"></div>
+<section class="sheet" id="sheet" aria-modal="true"></section>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const tg = window.Telegram && Telegram.WebApp;
+  try { tg.ready(); tg.expand(); tg.setHeaderColor('#0a0c13'); tg.setBackgroundColor('#0a0c13'); } catch (e) {}
+
+  const $ = s => document.querySelector(s);
+  const initData = (tg && tg.initData) || '';
+  const PAGE = 20;
+  const S = { q: '', genre: '', sort: 'new', offset: 0, loading: false, done: false, gen: 0, favs: new Set(), favChanged: false };
+
+  const haptic = (t = 'light') => { try { tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const fmt = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace('.0', '') + 'k' : String(n);
+  const hue = id => (id * 47) % 360;
+
+  function toast(msg, ms = 2300) {
+    const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), ms);
+  }
+
+  async function api(path, body) {
+    const r = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'X-Init-Data': initData, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!r.ok) { const e = new Error('http ' + r.status); e.status = r.status; throw e; }
+    return r.json();
+  }
+
+  /* ───────── Poster ───────── */
+  function posterBox(m) {
+    const box = el('div', 'poster');
+    const ph = el('div', 'ph', (m.title || '?').trim().charAt(0).toUpperCase());
+    ph.style.background = `linear-gradient(135deg,hsl(${hue(m.id)} 55% 32%),hsl(${(hue(m.id) + 55) % 360} 60% 20%))`;
+    box.appendChild(ph);
+    if (m.poster) {
+      const img = new Image();
+      img.alt = ''; img.decoding = 'async';
+      img.onload = () => img.classList.add('ok');
+      img.onerror = () => img.remove();
+      img.src = '/api/poster/' + m.id;
+      box.appendChild(img);
+    }
+    return box;
+  }
+
+  /* ───────── Kartalar ───────── */
+  function card(m, i) {
+    const c = el('div', 'card');
+    c.style.animationDelay = (i % PAGE) * 22 + 'ms';
+    const p = posterBox(m);
+    p.appendChild(el('div', 'shade'));
+    if (m.quality) p.appendChild(el('span', 'badge q', m.quality));
+    if (m.year) p.appendChild(el('span', 'badge y', m.year));
+    p.appendChild(el('span', 'views', '👁 ' + fmt(m.views)));
+    c.appendChild(p);
+    const meta = el('div', 'meta');
+    meta.appendChild(el('div', 't', m.title));
+    meta.appendChild(el('div', 'g', m.genre || m.country || ''));
+    c.appendChild(meta);
+    c.onclick = () => { haptic(); openSheet(m.id); };
+    return c;
+  }
+
+  const grid = $('#grid');
+  function skeleton() { for (let i = 0; i < 6; i++) grid.appendChild(el('div', 'sk')); }
+  function clearSkeleton() { grid.querySelectorAll('.sk').forEach(n => n.remove()); }
+
+  function showEmpty() {
+    const e = $('#empty'); e.replaceChildren(); e.hidden = false;
+    let icon = '🔍', title = 'Hech narsa topilmadi', text = 'Boshqa so\'z yoki janrni sinab ko\'ring.';
+    if (S.sort === 'fav' && !S.q && !S.genre) { icon = '⭐'; title = 'Saralanganlar bo\'sh'; text = 'Kino sahifasidagi 🤍 tugmasini bosib saqlang.'; }
+    else if (!S.q && !S.genre && S.sort !== 'fav') { icon = '🎬'; title = 'Hozircha kinolar yo\'q'; text = 'Tez orada yangi kinolar qo\'shiladi.'; }
+    e.appendChild(el('div', 'e', icon)); e.appendChild(el('b', null, title)); e.appendChild(document.createTextNode(text));
+  }
+
+  function showMessage(icon, title, text) {
+    grid.replaceChildren(); $('#count').textContent = '';
+    const e = $('#empty'); e.replaceChildren(); e.hidden = false;
+    e.appendChild(el('div', 'e', icon)); e.appendChild(el('b', null, title)); e.appendChild(document.createTextNode(text));
+  }
+
+  /* ───────── Yuklash ───────── */
+  async function load(reset) {
+    if (reset) {
+      S.offset = 0; S.done = false; S.gen++; S.loading = false;
+      grid.replaceChildren(); $('#empty').hidden = true; skeleton();
+    }
+    if (S.loading || S.done) return;
+    const gen = S.gen; S.loading = true;
+    try {
+      const qs = new URLSearchParams({ q: S.q, genre: S.genre, sort: S.sort, offset: S.offset, limit: PAGE });
+      const d = await api('/api/movies?' + qs);
+      if (gen !== S.gen) return;
+      clearSkeleton();
+      if (reset && d.genres) renderChips(d.genres);
+      d.items.forEach((m, i) => grid.appendChild(card(m, S.offset + i)));
+      S.offset += d.items.length;
+      S.done = S.offset >= d.total || d.items.length === 0;
+      $('#count').textContent = d.total ? d.total + ' ta kino' : '';
+      if (d.total === 0) showEmpty();
+    } catch (e) {
+      if (gen !== S.gen) return;
+      clearSkeleton();
+      if (e.status === 401) showMessage('🔒', 'Ruxsat yo\'q', 'Bu sahifani Telegram botdagi «Katalog» tugmasi orqali oching.');
+      else toast('Yuklab bo\'lmadi. Internetni tekshiring.');
+    } finally {
+      if (gen === S.gen) { S.loading = false; maybeMore(); }
+    }
+  }
+
+  function maybeMore() {
+    if (S.loading || S.done) return;
+    if ($('#sentinel').getBoundingClientRect().top < window.innerHeight + 500) load(false);
+  }
+  window.addEventListener('scroll', maybeMore, { passive: true });
+
+  /* ───────── Janrlar, tablar, qidiruv ───────── */
+  function renderChips(genres) {
+    const box = $('#chips'); box.replaceChildren();
+    if (!genres.length) return;
+    const mk = (label, val) => {
+      const b = el('button', S.genre === val ? 'on' : '', label);
+      b.onclick = () => { S.genre = val; haptic(); box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); load(true); };
+      return b;
+    };
+    box.appendChild(mk('Hammasi', ''));
+    genres.forEach(g => box.appendChild(mk(g, g)));
+  }
+
+  $('#tabs').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    haptic();
+    document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+    S.sort = b.dataset.sort; load(true);
+  });
+
+  const qi = $('#q'), clr = $('#clr');
+  let deb;
+  qi.addEventListener('input', () => {
+    clr.hidden = !qi.value;
+    clearTimeout(deb);
+    deb = setTimeout(() => { S.q = qi.value.trim(); load(true); }, 350);
+  });
+  qi.addEventListener('keydown', e => { if (e.key === 'Enter') qi.blur(); });
+  clr.onclick = () => { qi.value = ''; clr.hidden = true; S.q = ''; load(true); };
+
+  /* ───────── Kino oynasi (bottom sheet) ───────── */
+  const sheet = $('#sheet'), ov = $('#ov');
+  let sheetOpen = false;
+
+  function closeSheet() {
+    if (!sheetOpen) return;
+    sheetOpen = false;
+    sheet.classList.remove('on'); ov.classList.remove('on');
+    try { tg.BackButton.offClick(closeSheet); tg.BackButton.hide(); } catch (e) {}
+    if (S.favChanged && S.sort === 'fav') load(true);
+    S.favChanged = false;
+  }
+  ov.onclick = closeSheet;
+
+  async function openSheet(id) {
+    sheetOpen = true;
+    sheet.replaceChildren(el('div', 'grab'), el('div', 'loader', '⏳ Yuklanmoqda...'));
+    sheet.scrollTop = 0;
+    sheet.classList.add('on'); ov.classList.add('on');
+    try { tg.BackButton.onClick(closeSheet); tg.BackButton.show(); } catch (e) {}
+    try {
+      renderSheet(await api('/api/movie/' + id));
+    } catch (e) {
+      closeSheet(); toast('Kino topilmadi');
+    }
+  }
+
+  function renderSheet(m) {
+    sheet.replaceChildren(el('div', 'grab'));
+    const hero = el('div', 'hero');
+    hero.appendChild(posterBox(m));
+    const info = el('div', 'info');
+    info.appendChild(el('h2', null, m.title));
+    [m.year, m.quality, m.language].filter(Boolean).forEach(t => info.appendChild(el('span', 'tag', t)));
+    (m.genre || '').split(',').map(x => x.trim()).filter(Boolean).forEach(g => info.appendChild(el('span', 'tag', '🎭 ' + g)));
+    hero.appendChild(info); sheet.appendChild(hero);
+
+    const rows = el('div', 'rows');
+    const add = (k, v) => { if (!v) return; const d = el('div'); d.appendChild(document.createTextNode(k + ' ')); d.appendChild(el('b', null, v)); rows.appendChild(d); };
+    add('🌍 Davlat:', m.country); add('👁 Ko\'rishlar:', String(m.views)); add('🔢 Kod:', String(m.id));
+    sheet.appendChild(rows);
+    if (m.description) sheet.appendChild(el('div', 'desc', m.description));
+
+    const acts = el('div', 'acts');
+    const watch = el('button', 'btn main', '▶ Botda ko\'rish');
+    const fav = el('button', 'btn fav', S.favs.has(m.id) ? '❤️' : '🤍');
+    acts.append(watch, fav); sheet.appendChild(acts);
+
+    fav.onclick = async () => {
+      haptic();
+      try {
+        const r = await api('/api/fav', { id: m.id });
+        if (r.fav) S.favs.add(m.id); else S.favs.delete(m.id);
+        fav.textContent = r.fav ? '❤️' : '🤍';
+        S.favChanged = true;
+        toast(r.fav ? '⭐ Saralanganlarga qo\'shildi' : 'Saralanganlardan olib tashlandi', 1600);
+      } catch (e) { toast('Xatolik, qayta urinib ko\'ring'); }
+    };
+
+    watch.onclick = async () => {
+      haptic('medium');
+      watch.disabled = true; watch.textContent = '⏳ Yuborilmoqda...';
+      const reset = () => { watch.disabled = false; watch.textContent = '▶ Botda ko\'rish'; };
+      try {
+        const r = await api('/api/send', { id: m.id });
+        if (r.status === 'ok') {
+          toast('✅ Kino botga yuborildi!');
+          setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 900);
+        } else if (r.status === 'sub') {
+          toast('📢 Avval kanallarga obuna bo\'ling. Botga xabar yuborildi.', 3200);
+          setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 2000);
+        } else { toast('⚠️ Kinoni yuborib bo\'lmadi'); reset(); }
+      } catch (e) { toast('Xatolik, qayta urinib ko\'ring'); reset(); }
+    };
+  }
+
+  /* ───────── Boshlash ───────── */
+  async function init() {
+    if (!initData) {
+      showMessage('📱', 'Telegram orqali oching', 'Bu katalog faqat Telegram bot ichida ishlaydi.');
+      return;
+    }
+    try {
+      const me = await api('/api/me');
+      S.favs = new Set(me.favs);
+      const hi = $('#hi'); hi.replaceChildren(document.createTextNode('Salom, '), el('b', null, me.name), document.createTextNode(' 👋'));
+    } catch (e) {}
+    load(true);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

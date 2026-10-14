@@ -1,0 +1,128 @@
+"""Barcha tugmalar (klaviaturalar)."""
+from urllib.parse import quote
+
+from aiogram.types import InlineKeyboardButton as B
+from aiogram.types import InlineKeyboardMarkup, WebAppInfo
+
+import config
+
+
+def _kb(rows: list[list[B]]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def webapp_button(text: str = "🎬 Katalog (Mini App)") -> B | None:
+    if not config.WEBAPP_URL:
+        return None
+    return B(text=text, web_app=WebAppInfo(url=config.WEBAPP_URL))
+
+
+# ───────────── Foydalanuvchi ─────────────
+def main_kb() -> InlineKeyboardMarkup:
+    rows: list[list[B]] = []
+    w = webapp_button()
+    if w:
+        rows.append([w])
+    rows += [
+        [B(text="🔥 Top kinolar", callback_data="top"), B(text="🆕 Yangilari", callback_data="new")],
+        [B(text="🎲 Tasodifiy kino", callback_data="rand"), B(text="⭐ Saralanganlar", callback_data="favs")],
+    ]
+    return _kb(rows)
+
+
+def sub_kb(channels, movie_id: int = 0) -> InlineKeyboardMarkup:
+    rows = [[B(text=f"📢 {ch['title'] or 'Kanal'}", url=ch["link"])] for ch in channels]
+    rows.append([B(text="✅ Obunani tekshirish", callback_data=f"chk:{movie_id}")])
+    return _kb(rows)
+
+
+def movies_kb(movies, menu: bool = True) -> InlineKeyboardMarkup:
+    rows = []
+    for m in movies:
+        label = f"🎬 {m['title']}" + (f" • {m['year']}" if m["year"] else "")
+        rows.append([B(text=label[:60], callback_data=f"m:{m['id']}")])
+    if menu:
+        rows.append([B(text="⬅️ Menyu", callback_data="menu")])
+    return _kb(rows)
+
+
+def movie_kb(movie_id: int, is_fav: bool, bot_username: str, title: str) -> InlineKeyboardMarkup:
+    link = f"https://t.me/{bot_username}?start=m_{movie_id}"
+    share = f"https://t.me/share/url?url={quote(link)}&text={quote('🎬 ' + title)}"
+    rows = [
+        [B(text="💔 Saralanganlardan olib tashlash" if is_fav else "⭐ Saralanganlarga qo'shish",
+           callback_data=f"fav:{movie_id}")],
+        [B(text="📤 Do'stlarga ulashish", url=share)],
+    ]
+    w = webapp_button("🎞 Katalogni ochish")
+    if w:
+        rows.append([w])
+    return _kb(rows)
+
+
+def open_catalog_kb() -> InlineKeyboardMarkup | None:
+    w = webapp_button()
+    return _kb([[w]]) if w else None
+
+
+# ───────────── Admin ─────────────
+def admin_kb() -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text="📊 Statistika", callback_data="adm:stats"), B(text="🎬 Kino qo'shish", callback_data="adm:add")],
+        [B(text="🗑 Kino o'chirish", callback_data="adm:del"), B(text="📋 Kinolar ro'yxati", callback_data="adm:list")],
+        [B(text="📣 Xabar yuborish", callback_data="adm:bc"), B(text="📢 Majburiy obuna", callback_data="adm:ch")],
+        [B(text="🚫 Ban / Unban", callback_data="adm:ban"), B(text="⚙️ Sozlamalar", callback_data="adm:set")],
+        [B(text="💾 Zaxira nusxa", callback_data="adm:backup"), B(text="♻️ Tiklash", callback_data="adm:restore")],
+    ])
+
+
+def back_admin_kb() -> InlineKeyboardMarkup:
+    return _kb([[B(text="⬅️ Admin panel", callback_data="adm:panel")]])
+
+
+def cancel_kb() -> InlineKeyboardMarkup:
+    return _kb([[B(text="❌ Bekor qilish", callback_data="adm:cancel")]])
+
+
+def skip_kb() -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text="⏭ O'tkazib yuborish", callback_data="adm:skip")],
+        [B(text="❌ Bekor qilish", callback_data="adm:cancel")],
+    ])
+
+
+def added_kb(movie_id: int) -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text="👁 Ko'rish", callback_data=f"m:{movie_id}"), B(text="➕ Yana qo'shish", callback_data="adm:add")],
+        [B(text="⬅️ Admin panel", callback_data="adm:panel")],
+    ])
+
+
+def confirm_del_kb(movie_id: int) -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text="✅ Ha, o'chirish", callback_data=f"adm:delok:{movie_id}"),
+         B(text="❌ Yo'q", callback_data="adm:panel")],
+    ])
+
+
+def channels_kb(channels) -> InlineKeyboardMarkup:
+    rows = [[B(text=f"🗑 {ch['title'] or ch['chat_id']}", callback_data=f"adm:chdel:{ch['id']}")] for ch in channels]
+    rows.append([B(text="➕ Kanal qo'shish", callback_data="adm:chadd")])
+    rows.append([B(text="⬅️ Admin panel", callback_data="adm:panel")])
+    return _kb(rows)
+
+
+def settings_kb(protect: bool, sub_required: bool) -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text=f"{'✅' if protect else '❌'} Kontentni himoyalash (yuklash/forward taqiq)",
+           callback_data="adm:tgl:protect_content")],
+        [B(text=f"{'✅' if sub_required else '❌'} Majburiy obuna",
+           callback_data="adm:tgl:sub_required")],
+        [B(text="⬅️ Admin panel", callback_data="adm:panel")],
+    ])
+
+
+def broadcast_confirm_kb() -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text="✅ Yuborish", callback_data="adm:bcok"), B(text="❌ Bekor qilish", callback_data="adm:cancel")],
+    ])
