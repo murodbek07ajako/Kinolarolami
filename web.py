@@ -1,8 +1,10 @@
 """Mini App serveri: statik sahifa + JSON API (Telegram initData bilan himoyalangan)."""
 import hashlib
 import hmac
+import html
 import json
 import logging
+import re
 import time
 from urllib.parse import parse_qsl
 
@@ -11,6 +13,9 @@ from aiohttp import web
 import config
 import db
 import services as svc
+
+SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1", "auto_post": "1"}
+DRAFT_LIMITS = {"title": 120, "description": 800, "year": 4, "genre": 100, "country": 60, "language": 60, "quality": 20}
 
 
 def verify_init_data(init_data: str, token: str, max_age: int = 7 * 86400) -> dict | None:
@@ -38,6 +43,18 @@ def _auth(request: web.Request) -> dict:
     if not user:
         raise web.HTTPUnauthorized(reason="auth")
     return user
+
+
+def _admin(request: web.Request) -> dict:
+    """Faqat ADMIN_IDS dagilar uchun (initData imzosi tekshirilgan foydalanuvchi bo'yicha)."""
+    user = _auth(request)
+    if user["id"] not in config.ADMIN_IDS:
+        raise web.HTTPForbidden(reason="admin")
+    return user
+
+
+def _bad(msg: str) -> web.Response:
+    return web.json_response({"error": msg}, status=400)
 
 
 def _brief(r) -> dict:
@@ -72,11 +89,15 @@ async def health(request: web.Request):
     return web.json_response({"ok": True})
 
 
-# ───────────── API ─────────────
+# ───────────── Foydalanuvchi API ─────────────
 async def api_me(request: web.Request):
     user = _auth(request)
     name = (user.get("first_name") or "").strip() or "do'st"
-    return web.json_response({"name": name, "favs": await db.fav_ids(user["id"])})
+    return web.json_response({
+        "name": name,
+        "favs": await db.fav_ids(user["id"]),
+        "admin": user["id"] in config.ADMIN_IDS,
+    })
 
 
 async def api_movies(request: web.Request):
@@ -139,17 +160,158 @@ async def api_poster(request: web.Request):
     return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400", "Content-Type": "image/jpeg"})
 
 
+# ───────────── Admin API ─────────────
+async def api_admin_stats(request: web.Request):
+    _admin(request)
+    s = await db.stats()
+    s["top"] = [{"id": t["id"], "title": t["title"], "views": t["views"]} for t in s["top"]]
+    return web.json_response(s)
+
+
+async def _settings_payload() -> dict:
+    out = {k: (await db.get_setting(k, default)) == "1" for k, default in SETTING_DEFAULTS.items()}
+    out["channels"] = [
+        {"id": r["id"], "title": r["title"] or str(r["chat_id"]), "link": r["link"]}
+        for r in await db.list_channels()
+    ]
+    out["sources"] = [
+        {"id": r["chat_id"], "title": r["title"] or str(r["chat_id"])}
+        for r in await db.list_sources()
+    ]
+    return out
+
+
+async def api_admin_settings(request: web.Request):
+    _admin(request)
+    return web.json_response(await _settings_payload())
+
+
+async def api_admin_setting(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    key = body.get("key")
+    if key not in SETTING_DEFAULTS:
+        return _bad("Noma'lum sozlama")
+    await db.set_setting(key, "1" if body.get("value") else "0")
+    return web.json_response({"ok": True})
+
+
+async def api_admin_channel_add(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    kind = body.get("kind")
+    ref = svc.parse_ref(str(body.get("ref", "")))
+    if kind not in ("sub", "source") or ref is None:
+        return _bad("Kanalni @username yoki -100... ID ko'rinishida yozing")
+    try:
+        chat_id, title, link = await svc.resolve_channel(
+            request.app["bot"], ref, need_link=(kind == "sub"), channel_only=(kind == "source")
+        )
+    except ValueError as e:
+        return _bad(str(e))
+    if kind == "sub":
+        await db.add_channel(chat_id, title, link)
+    else:
+        await db.add_source(chat_id, title)
+    return web.json_response(await _settings_payload())
+
+
+async def api_admin_channel_del(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    kind, ident = body.get("kind"), int(body.get("id", 0))
+    if kind == "sub":
+        await db.del_channel(ident)
+    elif kind == "source":
+        await db.del_source(ident)
+    else:
+        return _bad("Noma'lum tur")
+    return web.json_response(await _settings_payload())
+
+
+async def api_admin_movie_del(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    mid = int(body.get("id", 0))
+    if not await db.get_movie(mid):
+        raise web.HTTPNotFound(reason="not found")
+    await db.delete_movie(mid)
+    return web.json_response({"ok": True})
+
+
+def _clean_draft(body: dict) -> dict:
+    out = {}
+    for key, limit in DRAFT_LIMITS.items():
+        value = re.sub(r"[ \t]+", " ", str(body.get(key) or "")).strip()[:limit]
+        if value:
+            out[key] = value
+    if not out.get("title"):
+        raise ValueError("Kino nomini kiriting")
+    if out.get("year") and not re.fullmatch(r"(18|19|20)\d{2}", out["year"]):
+        raise ValueError("Yil noto'g'ri (masalan: 2024)")
+    if out.get("genre"):
+        out["genre"] = ", ".join(g.strip() for g in out["genre"].split(",") if g.strip())
+    return out
+
+
+async def api_admin_draft_get(request: web.Request):
+    user = _admin(request)
+    return web.json_response({"draft": await db.get_draft(user["id"])})
+
+
+async def api_admin_draft_save(request: web.Request):
+    """Mini App'da kiritilgan ma'lumotlarni saqlaydi va botda adminga «endi videoni yuboring» deb yozadi."""
+    user = _admin(request)
+    try:
+        draft = _clean_draft(await request.json())
+    except ValueError as e:
+        return _bad(str(e))
+    await db.save_draft(user["id"], draft)
+    title = html.escape(draft["title"]) + (f" ({draft['year']})" if draft.get("year") else "")
+    text = (
+        "✅ <b>Kino ma'lumotlari saqlandi!</b>\n\n"
+        f"🎬 <b>{title}</b>\n\n"
+        "📤 Endi <b>kinoni (video yoki fayl)</b> shu yerga yuboring — bot uni avtomatik qo'shadi.\n"
+        "🖼 Xohlasangiz avval <b>poster rasmini</b> yuboring (yubormasangiz videoning kadri olinadi).\n"
+        "❌ Bekor qilish: /cancel"
+    )
+    notified = True
+    try:
+        await request.app["bot"].send_message(user["id"], text)
+    except Exception as e:
+        notified = False
+        logging.warning("Draft xabari yuborilmadi: %s", e)
+    return web.json_response({"ok": True, "notified": notified})
+
+
+async def api_admin_draft_clear(request: web.Request):
+    user = _admin(request)
+    await db.clear_draft(user["id"])
+    return web.json_response({"ok": True})
+
+
 def make_app(bot) -> web.Application:
     app = web.Application(middlewares=[errors])
     app["bot"] = bot
-    app.router.add_get("/", index)
-    app.router.add_get("/health", health)
-    app.router.add_get("/api/me", api_me)
-    app.router.add_get("/api/movies", api_movies)
-    app.router.add_get(r"/api/movie/{id:\d+}", api_movie)
-    app.router.add_post("/api/send", api_send)
-    app.router.add_post("/api/fav", api_fav)
-    app.router.add_get(r"/api/poster/{id:\d+}", api_poster)
+    r = app.router
+    r.add_get("/", index)
+    r.add_get("/health", health)
+    r.add_get("/api/me", api_me)
+    r.add_get("/api/movies", api_movies)
+    r.add_get(r"/api/movie/{id:\d+}", api_movie)
+    r.add_post("/api/send", api_send)
+    r.add_post("/api/fav", api_fav)
+    r.add_get(r"/api/poster/{id:\d+}", api_poster)
+    # admin
+    r.add_get("/api/admin/stats", api_admin_stats)
+    r.add_get("/api/admin/settings", api_admin_settings)
+    r.add_post("/api/admin/setting", api_admin_setting)
+    r.add_post("/api/admin/channel", api_admin_channel_add)
+    r.add_post("/api/admin/channel/delete", api_admin_channel_del)
+    r.add_post("/api/admin/movie/delete", api_admin_movie_del)
+    r.add_get("/api/admin/draft", api_admin_draft_get)
+    r.add_post("/api/admin/draft", api_admin_draft_save)
+    r.add_post("/api/admin/draft/clear", api_admin_draft_clear)
     return app
 
 

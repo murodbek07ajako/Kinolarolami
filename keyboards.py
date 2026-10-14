@@ -72,6 +72,7 @@ def admin_kb() -> InlineKeyboardMarkup:
         [B(text="🗑 Kino o'chirish", callback_data="adm:del"), B(text="📋 Kinolar ro'yxati", callback_data="adm:list")],
         [B(text="📣 Xabar yuborish", callback_data="adm:bc"), B(text="📢 Majburiy obuna", callback_data="adm:ch")],
         [B(text="🚫 Ban / Unban", callback_data="adm:ban"), B(text="⚙️ Sozlamalar", callback_data="adm:set")],
+        [B(text="📥 Avto-yuklash kanali", callback_data="adm:src")],
         [B(text="💾 Zaxira nusxa", callback_data="adm:backup"), B(text="♻️ Tiklash", callback_data="adm:restore")],
     ])
 
@@ -93,6 +94,7 @@ def skip_kb() -> InlineKeyboardMarkup:
 
 def added_kb(movie_id: int) -> InlineKeyboardMarkup:
     return _kb([
+        [B(text="📣 Hammaga tarqatish", callback_data=f"adm:push:{movie_id}")],
         [B(text="👁 Ko'rish", callback_data=f"m:{movie_id}"), B(text="➕ Yana qo'shish", callback_data="adm:add")],
         [B(text="⬅️ Admin panel", callback_data="adm:panel")],
     ])
@@ -112,12 +114,30 @@ def channels_kb(channels) -> InlineKeyboardMarkup:
     return _kb(rows)
 
 
-def settings_kb(protect: bool, sub_required: bool) -> InlineKeyboardMarkup:
+def sources_kb(sources) -> InlineKeyboardMarkup:
+    rows = [[B(text=f"🗑 {s['title'] or s['chat_id']}", callback_data=f"adm:srcdel:{s['chat_id']}")] for s in sources]
+    rows.append([B(text="➕ Kanal qo'shish", callback_data="adm:srcadd")])
+    rows.append([B(text="⬅️ Admin panel", callback_data="adm:panel")])
+    return _kb(rows)
+
+
+def announce_kb(movie_id: int) -> InlineKeyboardMarkup:
+    """Yangi kino e'lonining tugmalari (foydalanuvchilarga boradi)."""
+    rows = [[B(text="▶️ Tomosha qilish", callback_data=f"m:{movie_id}")]]
+    w = webapp_button("🎞 Katalogni ochish")
+    if w:
+        rows.append([w])
+    return _kb(rows)
+
+
+def settings_kb(protect: bool, sub_required: bool, auto_post: bool) -> InlineKeyboardMarkup:
     return _kb([
         [B(text=f"{'✅' if protect else '❌'} Kontentni himoyalash (yuklash/forward taqiq)",
            callback_data="adm:tgl:protect_content")],
         [B(text=f"{'✅' if sub_required else '❌'} Majburiy obuna",
            callback_data="adm:tgl:sub_required")],
+        [B(text=f"{'✅' if auto_post else '❌'} Avto-tarqatish (kanaldan yangi kino kelganda hammaga xabar)",
+           callback_data="adm:tgl:auto_post")],
         [B(text="⬅️ Admin panel", callback_data="adm:panel")],
     ])
 

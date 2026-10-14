@@ -1,4 +1,5 @@
 """SQLite bilan ishlash (aiosqlite)."""
+import json
 import shutil
 import sqlite3
 import time
@@ -34,6 +35,17 @@ CREATE TABLE IF NOT EXISTS movies(
   poster_id TEXT NOT NULL DEFAULT '',
   search_text TEXT NOT NULL DEFAULT '',
   views INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  src_chat INTEGER,
+  src_msg INTEGER
+);
+CREATE TABLE IF NOT EXISTS sources(
+  chat_id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS drafts(
+  admin_id INTEGER PRIMARY KEY,
+  data TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS favorites(
@@ -75,6 +87,19 @@ async def init(path: str) -> None:
     _db.row_factory = aiosqlite.Row
     await _db.execute("PRAGMA journal_mode=WAL")
     await _db.executescript(SCHEMA)
+    await _migrate()
+
+
+async def _migrate() -> None:
+    """Eski bazalarni (zaxiradan tiklanganlarini ham) yangi tuzilishga keltiradi."""
+    cols = {r["name"] for r in await _all("PRAGMA table_info(movies)")}
+    for name in ("src_chat", "src_msg"):
+        if name not in cols:
+            await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} INTEGER")
+    # Bir kanal postidan bitta kino (takroriy qo'shilishdan himoya)
+    await _db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_src ON movies(src_chat, src_msg) WHERE src_chat IS NOT NULL"
+    )
     await _db.commit()
 
 
@@ -182,24 +207,58 @@ async def broadcast_ids() -> list[int]:
 
 
 # ───────────── Kinolar ─────────────
-async def add_movie(d: dict) -> int:
-    genre = d.get("genre", "")
-    search = norm(" ".join([d["title"], genre, d.get("year", ""), d.get("country", ""), d.get("language", "")]))
+META_FIELDS = ("title", "description", "year", "genre", "country", "language", "quality")
+
+
+def _derive(d: dict) -> tuple[str, str]:
+    """(qidiruv matni, kichik harfli janrlar) — d dagi meta maydonlardan."""
+    genre = d.get("genre", "") or ""
+    search = norm(" ".join([d.get("title", ""), genre, d.get("year", ""), d.get("country", ""), d.get("language", "")]))
     genre_lc = ",".join(norm(g) for g in genre.split(",") if g.strip())
+    return search, genre_lc
+
+
+async def add_movie(d: dict) -> int:
+    search, genre_lc = _derive(d)
     return await _run(
         """INSERT INTO movies(title, description, year, genre, genre_lc, country, language, quality,
-                              file_id, file_type, poster_id, search_text, created_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                              file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
-            d["title"], d.get("description", ""), d.get("year", ""), genre, genre_lc,
+            d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""), genre_lc,
             d.get("country", ""), d.get("language", ""), d.get("quality", ""),
             d["file_id"], d.get("file_type", "video"), d.get("poster", ""), search, int(time.time()),
+            d.get("src_chat"), d.get("src_msg"),
         ),
     )
 
 
+async def update_movie_meta(mid: int, d: dict) -> None:
+    """Faqat berilgan meta maydonlarni yangilaydi (fayl va poster tegilmaydi)."""
+    movie = await get_movie(mid)
+    if not movie:
+        return
+    cur = {k: movie[k] for k in META_FIELDS}
+    cur.update({k: v for k, v in d.items() if k in META_FIELDS and v})
+    search, genre_lc = _derive(cur)
+    await _run(
+        """UPDATE movies SET title=?, description=?, year=?, genre=?, genre_lc=?, country=?,
+                             language=?, quality=?, search_text=? WHERE id=?""",
+        (cur["title"], cur["description"], cur["year"], cur["genre"], genre_lc, cur["country"],
+         cur["language"], cur["quality"], search, mid),
+    )
+
+
+async def set_poster(mid: int, poster_id: str) -> None:
+    await _run("UPDATE movies SET poster_id=? WHERE id=?", (poster_id, mid))
+
+
 async def get_movie(mid: int):
     return await _one("SELECT * FROM movies WHERE id=?", (mid,))
+
+
+async def movie_by_source(chat_id: int, msg_id: int):
+    return await _one("SELECT * FROM movies WHERE src_chat=? AND src_msg=?", (chat_id, msg_id))
 
 
 async def delete_movie(mid: int) -> None:
@@ -312,6 +371,50 @@ async def list_channels():
 
 async def del_channel(cid: int) -> None:
     await _run("DELETE FROM channels WHERE id=?", (cid,))
+
+
+# ───────────── Avto-yuklash kanallari (manba) ─────────────
+async def add_source(chat_id: int, title: str) -> None:
+    await _run(
+        """INSERT INTO sources(chat_id, title) VALUES(?,?)
+           ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title""",
+        (chat_id, title),
+    )
+
+
+async def list_sources():
+    return await _all("SELECT * FROM sources ORDER BY rowid")
+
+
+async def del_source(chat_id: int) -> None:
+    await _run("DELETE FROM sources WHERE chat_id=?", (chat_id,))
+
+
+async def is_source(chat_id: int) -> bool:
+    return bool(await _one("SELECT 1 FROM sources WHERE chat_id=?", (chat_id,)))
+
+
+# ───────────── Qoralama: Mini App'da kiritilgan, video kutilayotgan kino ─────────────
+async def save_draft(admin_id: int, data: dict) -> None:
+    await _run(
+        """INSERT INTO drafts(admin_id, data, created_at) VALUES(?,?,?)
+           ON CONFLICT(admin_id) DO UPDATE SET data=excluded.data, created_at=excluded.created_at""",
+        (admin_id, json.dumps(data, ensure_ascii=False), int(time.time())),
+    )
+
+
+async def get_draft(admin_id: int) -> dict | None:
+    row = await _one("SELECT data FROM drafts WHERE admin_id=?", (admin_id,))
+    if not row:
+        return None
+    try:
+        return json.loads(row["data"])
+    except ValueError:
+        return None
+
+
+async def clear_draft(admin_id: int) -> None:
+    await _run("DELETE FROM drafts WHERE admin_id=?", (admin_id,))
 
 
 # ───────────── Sozlamalar ─────────────

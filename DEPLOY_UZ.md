@@ -45,3 +45,26 @@ Bepul hostingda fayllar server qayta ishga tushganda o'chib ketadi. Shuning uchu
 
 ## Muammo bo'lsa
 Render sahifasida **Logs** bo'limini oching va oxirgi qizil yozuvni menga yuboring.
+
+## Yangilash (muhim!)
+Render har safar GitHub'ga yangi fayl yuklanganda botni qayta ishga tushiradi va **bazani o'chiradi**. Shuning uchun:
+1. Yuklashdan OLDIN botda `/admin` → **💾 Zaxira nusxa** bosing (fayl Telegramga keladi)
+2. Hamma fayllarni **bitta commit**da yuklang (Upload files → hammasini tanlang → Commit)
+3. Bot qayta ishga tushgach `/restore` yozib zaxira faylini yuboring
+
+## Katalog ichidagi Admin panel
+Admin bo'lsangiz katalog tepasida **⚙️** tugmasi chiqadi:
+- 📊 Statistika — foydalanuvchilar, ko'rishlar, top kinolar
+- 🎬 Qo'shish — ma'lumotlarni to'ldirib «Saqlash» bosasiz, bot videoni so'raydi, yuborasiz
+- 📋 Kinolar — qidirish va o'chirish
+- ⚙️ Sozlama — himoya, majburiy obuna, avto-tarqatish, kanallar
+
+## Kanaldan avto-yuklash (keyingi qadam)
+`/admin` → «📥 Avto-yuklash kanali» orqali kanalni ulang (bot kanalda admin bo'lsin). Kanalga video tashlab, izohiga yozing:
+```
+Qasoskor
+Yili: 2023
+Janri: Jangari, Drama
+Davlati: AQSH
+```
+Bot o'zi qo'shadi, posterni videoning Telegramdagi kadridan oladi va hammaga tarqatadi. Poster yoqmasa: `/poster KOD` va rasm yuboring.

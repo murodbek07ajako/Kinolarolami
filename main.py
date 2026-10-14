@@ -10,6 +10,7 @@ from aiogram.types import (BotCommand, BotCommandScopeChat, CallbackQuery, MenuB
                            WebAppInfo)
 
 import admin_handlers as admin
+import autoload
 import backup
 import config
 import db
@@ -48,6 +49,7 @@ async def setup_bot(bot: Bot) -> None:
             await bot.set_my_commands(
                 [BotCommand(command="admin", description="👨‍💻 Admin panel"),
                  BotCommand(command="start", description="🏠 Bosh menyu"),
+                 BotCommand(command="poster", description="🖼 Poster o'zgartirish"),
                  BotCommand(command="cancel", description="❌ Bekor qilish")],
                 scope=BotCommandScopeChat(chat_id=admin_id),
             )
@@ -80,6 +82,7 @@ async def main() -> None:
     dp.callback_query.outer_middleware(TrackMiddleware())
     dp.include_router(admin.router)
     dp.include_router(user.router)
+    dp.include_router(autoload.router)
 
     runner = await web.start(bot, config.PORT)
     me = await bot.me()

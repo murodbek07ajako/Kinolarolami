@@ -2,10 +2,12 @@
 import asyncio
 import html
 import logging
+import re
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
+import config
 import db
 import keyboards as kb
 
@@ -99,3 +101,50 @@ async def deliver(bot: Bot, chat_id: int, user_id: int, movie_id: int) -> str:
         logging.error("Kino #%s yuborilmadi: %s", movie_id, e)
         return "err"
     return "ok"
+
+
+# ───────────── Adminlarga xabar / kanallarni aniqlash ─────────────
+async def notify_admins(bot: Bot, text: str, reply_markup=None) -> None:
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, text, reply_markup=reply_markup, disable_web_page_preview=True)
+        except Exception as e:
+            logging.warning("Adminga xabar yuborilmadi (%s): %s", admin_id, e)
+
+
+def parse_ref(text: str):
+    """'@kanal', 't.me/kanal' yoki -100123... ni int | '@username' ga aylantiradi (aks holda None)."""
+    t = (text or "").strip()
+    t = re.sub(r"^(?:https?://)?t\.me/", "", t)
+    t = t.split("?")[0].split("/")[0]
+    if re.fullmatch(r"-?\d{5,}", t):
+        return int(t)
+    t = t.lstrip("@")
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{3,}", t):
+        return "@" + t
+    return None
+
+
+async def resolve_channel(bot: Bot, ref, need_link: bool = True, channel_only: bool = False):
+    """Kanalni tekshiradi: bot admin bo'lishi shart. (chat_id, sarlavha, havola) qaytaradi.
+    Muammo bo'lsa ValueError(o'zbekcha matn) ko'taradi."""
+    try:
+        chat = await bot.get_chat(ref)
+        me = await bot.me()
+        member = await bot.get_chat_member(chat.id, me.id)
+    except (TelegramBadRequest, TelegramForbiddenError):
+        raise ValueError("Kanal topilmadi yoki bot unda admin emas. Avval botni kanalga admin qiling.")
+    if channel_only and chat.type != "channel":
+        raise ValueError("Bu kanal emas (guruh bo'lishi mumkin). Avto-yuklash faqat kanallar uchun.")
+    if member.status not in ("administrator", "creator"):
+        raise ValueError("Bot bu kanalda admin emas. Avval botni admin qiling.")
+    link = ""
+    if need_link:
+        if chat.username:
+            link = f"https://t.me/{chat.username}"
+        else:
+            try:
+                link = (await bot.create_chat_invite_link(chat.id)).invite_link
+            except (TelegramBadRequest, TelegramForbiddenError):
+                raise ValueError("Havola yaratib bo'lmadi: botga «Taklif havolasini yaratish» huquqini bering.")
+    return chat.id, chat.title or str(chat.id), link
