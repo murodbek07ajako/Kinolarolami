@@ -1,5 +1,5 @@
-import asyncio, html, os, json, hmac, hashlib, sqlite3, time
-from urllib.parse import parse_qsl
+import asyncio, html, io, os, json, hmac, hashlib, sqlite3, time
+from urllib.parse import parse_qsl, quote
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart, CommandObject
@@ -85,9 +85,19 @@ async def start(msg: Message, command: CommandObject):
     if bad:
         return await msg.answer("Botdan foydalanish uchun kanallarga obuna bo'ling:", reply_markup=sub_kb(bad))
     me = await bot.me()
-    await msg.answer("👋 Salom! Kino <b>kodini</b> yoki <b>nomini</b> yuboring.\n"
-                     f"🔗 Sizning taklif havolangiz: t.me/{me.username}?start={uid}",
-                     parse_mode="HTML", reply_markup=main_kb())
+    name = html.escape(msg.from_user.first_name or "do'st")
+    await msg.answer(
+        f"🎬 <b>Xush kelibsiz, {name}!</b>\n\n"
+        f"✨ <b>{html.escape(me.first_name)}</b> — sevimli kinolaringizni bir joyda topasiz!\n\n"
+        "🍿 <b>Bu yerda siz:</b>\n"
+        "• 🔎 Kinoni <b>kodi</b> yoki <b>nomi</b> bilan topasiz\n"
+        "• 🎞 Katalogdan janr bo'yicha tanlaysiz\n"
+        "• ⭐ Kinolarga baho berasiz\n"
+        "• ❤️ Sevimlilarni saqlaysiz\n"
+        "• 🔥 Yangi kinolardan birinchi bo'lib xabar olasiz\n\n"
+        "👇 Boshlash uchun pastdagi tugmani bosing yoki kino kodini yuboring.\n\n"
+        f"🎁 Do'stlaringizni taklif qiling:\nt.me/{me.username}?start={uid}",
+        parse_mode="HTML", reply_markup=main_kb())
 
 @dp.callback_query(F.data == "check")
 async def check(cb: CallbackQuery):
@@ -312,10 +322,51 @@ async def api_send(req):
         return web.json_response({"ok": False, "error": "sub"})
     return web.json_response({"ok": await send_movie(user["id"], int(body["code"]))})
 
+CACHE = {}
+
+async def api_play(req):
+    b = await req.json()
+    u = valid_init(b.get("initData", ""))
+    if not u: return web.json_response({"ok": False, "error": "auth"}, status=403)
+    if await missing_channels(u["id"]):
+        return web.json_response({"ok": False, "error": "sub"})
+    code = int(b["code"])
+    m = q("SELECT file_id FROM movies WHERE code=?", code)
+    if not m or not m[0]["file_id"]: return web.json_response({"ok": False, "error": "none"})
+    try:
+        await bot.get_file(m[0]["file_id"])
+    except Exception:
+        return web.json_response({"ok": False, "error": "big"})
+    run("UPDATE movies SET views=views+1 WHERE code=?", code)
+    return web.json_response({"ok": True, "url": f"/api/stream?code={code}&init={quote(b['initData'])}"})
+
+async def api_stream(req):
+    if not valid_init(req.query.get("init", "")): return web.Response(status=403)
+    code = int(req.query["code"])
+    if code not in CACHE:
+        m = q("SELECT file_id FROM movies WHERE code=?", code)
+        if not m: return web.Response(status=404)
+        buf = io.BytesIO()
+        await bot.download(m[0]["file_id"], destination=buf)
+        if len(CACHE) >= 2: CACHE.pop(next(iter(CACHE)))
+        CACHE[code] = buf.getvalue()
+    data = CACHE[code]; size = len(data)
+    start, end, status = 0, size - 1, 200
+    rng = req.headers.get("Range")
+    if rng and rng.startswith("bytes="):
+        a, _, z = rng[6:].partition("-")
+        start = int(a) if a else 0
+        end = min(int(z), size - 1) if z else size - 1
+        status = 206
+    h = {"Accept-Ranges": "bytes", "Content-Type": "video/mp4"}
+    if status == 206: h["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return web.Response(body=data[start:end + 1], status=status, headers=h)
+
 async def main():
     app = web.Application()
     app.add_routes([web.get("/", index), web.get("/health", health),
-                    web.get("/api/movies", api_movies), web.post("/api/admin", api_admin), web.post("/api/send", api_send)])
+                    web.get("/api/movies", api_movies), web.post("/api/admin", api_admin), web.post("/api/send", api_send),
+                    web.post("/api/play", api_play), web.get("/api/stream", api_stream)])
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
     await dp.start_polling(bot)
