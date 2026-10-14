@@ -75,7 +75,7 @@ const toast=t=>{const e=$("toast");e.textContent=t;e.style.display="block";setTi
 async function api(action,d={}){const r=await fetch("/api/admin",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,action,...d})});return r.json()}
 async function load(){try{const r=await fetch(`/api/movies?q=${encodeURIComponent(S.q)}&genre=${encodeURIComponent(S.genre)}`,{headers:H});Object.assign(S,await r.json());render()}catch(e){$('main').innerHTML='<div class="empty">⚠️ Server javob bermadi. Biroz kutib qayta oching.</div>'}}
 function open_(h){$("sh").innerHTML=h;$("ov").classList.add("show")}
-function close_(){$("ov").classList.remove("show")}
+function close_(){$("ov").classList.remove("show");$("sh").innerHTML=""}
 $("ov").onclick=e=>{if(e.target.id==="ov")close_()};
 function poster(m){return `<div class="poster">${m.poster?`<img src="${esc(m.poster)}" loading="lazy" onerror="this.remove()">`:"🎬"}${m.draft?'<b class="tag">Video yo\'q</b>':''}${m.rating?`<span class="rt">⭐${m.rating}</span>`:""}</div>`}
 function render(){
@@ -85,7 +85,7 @@ function render(){
   const ms=S.movies.filter(m=>S.tab!=="fav"||favs.has(m.code));
   const hero=(S.tab==="all"&&!S.q&&!S.genre&&ms.length)?(ms.find(m=>!m.draft)||ms[0]):null;
   const rest=hero?ms.filter(m=>m!==hero):ms;
-  const hh=hero?`<div class="hero" onclick="detail(${hero.code})">${hero.poster?`<img src="${esc(hero.poster)}" onerror="this.remove()">`:""}<div class="hi"><span class="badge">🔥 Yangi</span><h3>${esc(hero.title)}</h3><div class="cm">${esc(hero.year)} · ${esc(hero.genre)} · ⭐${hero.rating||"—"}</div>${hero.draft?"":`<div class="row" style="margin:10px 0 0"><button class="btn" onclick="event.stopPropagation();watch(${hero.code})">🍿 Ko'rish</button></div>`}</div></div>`:"";
+  const hh=hero?`<div class="hero" onclick="detail(${hero.code})">${hero.poster?`<img src="${esc(hero.poster)}" onerror="this.remove()">`:""}<div class="hi"><span class="badge">🔥 Yangi</span><h3>${esc(hero.title)}</h3><div class="cm">${esc(hero.year)} · ${esc(hero.genre)} · ⭐${hero.rating||"—"}</div>${hero.draft?"":`<div class="row" style="margin:10px 0 0"><button class="btn" onclick="event.stopPropagation();pick(${hero.code})">🍿 Ko'rish</button></div>`}</div></div>`:"";
   $("main").innerHTML=`<input id="s" placeholder="🔎 Kino qidirish..." value="${esc(S.q)}">
   <div class="chips">${[["","Hammasi"],...S.genres.map(g=>[g,g])].map(([v,l])=>`<div class="chip ${S.genre===v?"on":""}" onclick="gen(this.dataset.v)" data-v="${esc(v)}">${esc(l)}</div>`).join("")}</div>
   ${hh}<div class="stt">${S.tab==="fav"?"❤️ Sevimlilar":"🎞 Barcha kinolar"}</div><div class="grid">${rest.length||hero?rest.map(m=>`<div class="card" onclick="detail(${m.code})">${poster(m)}<div class="ct">${esc(m.title)}</div><div class="cm">${esc(m.year)} · ${esc((m.genre||"").split(",")[0])}</div></div>`).join(""):'<div class="empty">Hech narsa topilmadi 😕</div>'}</div>`;
@@ -97,10 +97,19 @@ const get=c=>S.movies.find(m=>m.code==c);
 function detail(c){const m=get(c);
   open_(`<div class="dh">${poster(m)}<div><h2>${esc(m.title)}</h2><div class="cm">📅 ${esc(m.year)}<br>🎭 ${esc(m.genre)}<br>⭐ ${m.rating||"—"} · 👁 ${m.views}<br>🔢 Kod: ${m.code}</div></div></div>
   ${m.descr?`<p>${esc(m.descr)}</p>`:""}
-  <div class="row">${m.trailer?`<button class="btn sec" onclick="trailer(${c})">▶ Treyler</button>`:""}<button class="btn sec" onclick="fav(${c})">${favs.has(c)?"❤️":"🤍"}</button>${m.draft?"":`<button class="btn" onclick="watch(${c})">🍿 Ko'rish</button>`}</div>
+  <div class="row">${m.trailer?`<button class="btn sec" onclick="trailer(${c})">▶ Treyler</button>`:""}<button class="btn sec" onclick="fav(${c})">${favs.has(c)?"❤️":"🤍"}</button>${m.draft?"":`<button class="btn" onclick="pick(${c})">🍿 Ko'rish</button>`}</div>
   ${S.admin?`<div class="sec-t">⚙️ Admin</div><div class="row"><button class="btn sec sm" onclick="kinoForm(${c})">✏️ Tahrir</button><button class="btn sec sm" onclick="vid(${c})">🎥 Video</button><button class="btn sec sm" onclick="ntf(${c})">📣 Xabar</button><button class="btn bad sm" onclick="del(${c})">🗑</button></div>`:""}`)}
 function fav(c){favs.has(c)?favs.delete(c):favs.add(c);localStorage.setItem("favs",JSON.stringify([...favs]));detail(c);render()}
 function trailer(c){tg.openLink(get(c).trailer)}
+function pick(c){const m=get(c);
+  open_(`<h2>🍿 ${esc(m.title)}</h2><p>Qayerda ko'rmoqchisiz?</p><div class="row"><button class="btn" onclick="playIn(${c})">📱 Katalog ichida</button><button class="btn sec" onclick="watch(${c})">💬 Chatda (botga)</button></div>`)}
+async function playIn(c){const m=get(c);
+  open_(`<h2>${esc(m.title)}</h2><div class="cm">Yuklanmoqda, biroz kuting ⏳</div>`);
+  let d;try{const r=await fetch("/api/play",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,code:c})});d=await r.json()}catch(e){d={ok:false}}
+  if(d.ok){open_(`<h2>${esc(m.title)}</h2><video src="${d.url}" controls autoplay playsinline style="width:100%;border-radius:14px;background:#000;margin-top:8px"></video><div class="row" style="margin-top:12px"><button class="btn sec" onclick="close_()">✕ Yopish</button></div>`)}
+  else if(d.error==="big"){tg.showAlert("Bu kino katta (20 MB dan ortiq), katalog ichida ochilmaydi. Chatga yuboraman.",()=>watch(c))}
+  else if(d.error==="sub"){close_();tg.showAlert("Avval kanallarga obuna bo'ling")}
+  else{close_();tg.showAlert("Xatolik. Chatda ko'rib turing.")}}
 async function watch(c){const r=await fetch("/api/send",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,code:c})});const d=await r.json();
   if(d.ok)tg.close();else tg.showAlert(d.error==="sub"?"Avval kanallarga obuna bo'ling":"Xatolik")}
 function kinoForm(c){const m=c?get(c):{};
