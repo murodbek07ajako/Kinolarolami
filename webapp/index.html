@@ -56,11 +56,25 @@ label input{width:auto;margin:0}
 .stt{font-weight:700;margin:4px 0 12px;font-size:17px}
 .empty{text-align:center;color:var(--hint);padding:40px 0;grid-column:1/-1}
 .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--ok);color:#000;padding:10px 18px;border-radius:20px;font-size:14px;z-index:20;display:none}
+.pl{position:fixed;inset:0;z-index:15;background:var(--bg);display:none;overflow-y:auto}
+.pl.show{display:block}
+.pbg{position:fixed;inset:0;background-size:cover;background-position:center;filter:blur(40px) brightness(.35);transform:scale(1.2)}
+.pw{position:relative;padding:calc(12px + env(safe-area-inset-top)) 14px 40px}
+.pt{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.pt h2{margin:0;font-size:18px}
+.pb{width:40px;height:40px;flex:none;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:18px}
+.vw{position:relative;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:#000;box-shadow:0 12px 40px #7c5cff66;margin-bottom:16px}
+.vw video{width:100%;height:100%;display:block}
+.ld{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#fff;font-size:13px;background:#000b;pointer-events:none}
+.sp{width:34px;height:34px;border:3px solid #fff3;border-top-color:var(--acc2);border-radius:50%;animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.chp{display:inline-block;background:#ffffff1c;padding:6px 12px;border-radius:14px;font-size:12px;margin:0 6px 8px 0}
 </style></head><body>
 <h1>🎬 Kinolar olami</h1>
 <div id="main"><div class="grid"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div></div>
 <div class="nav" id="nav"></div>
 <div class="ov" id="ov"><div class="sheet" id="sh"></div></div>
+<div class="pl" id="pl"></div>
 <div class="toast" id="toast"></div>
 <script>
 const tg=Telegram.WebApp;tg.ready();tg.expand();
@@ -103,13 +117,24 @@ function fav(c){favs.has(c)?favs.delete(c):favs.add(c);localStorage.setItem("fav
 function trailer(c){tg.openLink(get(c).trailer)}
 function pick(c){const m=get(c);
   open_(`<h2>🍿 ${esc(m.title)}</h2><p>Qayerda ko'rmoqchisiz?</p><div class="row"><button class="btn" onclick="playIn(${c})">📱 Katalog ichida</button><button class="btn sec" onclick="watch(${c})">💬 Chatda (botga)</button></div>`)}
-async function playIn(c){const m=get(c);
-  open_(`<h2>${esc(m.title)}</h2><div class="cm">Yuklanmoqda, biroz kuting ⏳</div>`);
+function closePl(){const v=document.querySelector("#pl video");if(v){v.pause();v.removeAttribute("src");v.load()}$("pl").classList.remove("show");$("pl").innerHTML=""}
+function tfav(c){favs.has(c)?favs.delete(c):favs.add(c);localStorage.setItem("favs",JSON.stringify([...favs]))}
+function fsz(){const v=$("vd");if(!v)return;(v.requestFullscreen||v.webkitRequestFullscreen||v.webkitEnterFullscreen).call(v)}
+async function playIn(c){const m=get(c);close_();
+  $("pl").innerHTML=`<div class="pbg" style="background-image:url('${esc(m.poster)}')"></div><div class="pw"><div class="pt"><button class="pb" onclick="closePl()">←</button><h2>${esc(m.title)}</h2></div><div class="vw"><div class="ld"><div class="sp"></div>Yuklanmoqda...</div></div></div>`;
+  $("pl").classList.add("show");
   let d;try{const r=await fetch("/api/play",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,code:c})});d=await r.json()}catch(e){d={ok:false}}
-  if(d.ok){open_(`<h2>${esc(m.title)}</h2><video src="${d.url}" controls autoplay playsinline style="width:100%;border-radius:14px;background:#000;margin-top:8px"></video><div class="row" style="margin-top:12px"><button class="btn sec" onclick="close_()">✕ Yopish</button></div>`)}
-  else if(d.error==="big"){tg.showAlert("Bu kino katta (20 MB dan ortiq), katalog ichida ochilmaydi. Chatga yuboraman.",()=>watch(c))}
-  else if(d.error==="sub"){close_();tg.showAlert("Avval kanallarga obuna bo'ling")}
-  else{close_();tg.showAlert("Xatolik. Chatda ko'rib turing.")}}
+  if(!d.ok){closePl();
+    if(d.error==="big")tg.showAlert("Bu kino katta (20 MB dan ortiq), katalog ichida ochilmaydi. Chatga yuboraman.",()=>watch(c));
+    else if(d.error==="sub")tg.showAlert("Avval kanallarga obuna bo'ling");
+    else tg.showAlert("Xatolik. Chatda ko'rib turing.");
+    return}
+  const vw=$("pl").querySelector(".vw");
+  vw.innerHTML=`<video id="vd" src="${d.url}" ${m.poster?`poster="${esc(m.poster)}"`:""} controls autoplay playsinline></video><div class="ld" id="ld"><div class="sp"></div>Yuklanmoqda...</div>`;
+  const v=$("vd"),hide=()=>{const l=$("ld");if(l)l.remove()};
+  v.addEventListener("playing",hide);v.addEventListener("loadeddata",hide);
+  v.onerror=()=>{closePl();tg.showAlert("Video ochilmadi. Chatda ko'ring.",()=>watch(c))};
+  $("pl").querySelector(".pw").insertAdjacentHTML("beforeend",`<div><span class="chp">📅 ${esc(m.year)}</span><span class="chp">🎭 ${esc(m.genre)}</span><span class="chp">⭐ ${m.rating||"—"}</span><span class="chp">👁 ${m.views}</span></div>${m.descr?`<p>${esc(m.descr)}</p>`:""}<div class="row"><button class="btn sec" onclick="tfav(${c});this.textContent=favs.has(${c})?'❤️ Sevimli':'🤍 Sevimlilarga'">${favs.has(c)?"❤️ Sevimli":"🤍 Sevimlilarga"}</button><button class="btn sec" onclick="fsz()">⛶ To'liq ekran</button></div><div class="row"><button class="btn" onclick="watch(${c})">💬 Chatga yuborish</button></div>`)}
 async function watch(c){const r=await fetch("/api/send",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,code:c})});const d=await r.json();
   if(d.ok)tg.close();else tg.showAlert(d.error==="sub"?"Avval kanallarga obuna bo'ling":"Xatolik")}
 function kinoForm(c){const m=c?get(c):{};
