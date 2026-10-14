@@ -98,12 +98,12 @@ function detail(c){const m=get(c);
   open_(`<div class="dh">${poster(m)}<div><h2>${esc(m.title)}</h2><div class="cm">📅 ${esc(m.year)}<br>🎭 ${esc(m.genre)}<br>⭐ ${m.rating||"—"} · 👁 ${m.views}<br>🔢 Kod: ${m.code}</div></div></div>
   ${m.descr?`<p>${esc(m.descr)}</p>`:""}
   <div class="row">${m.trailer?`<button class="btn sec" onclick="trailer(${c})">▶ Treyler</button>`:""}<button class="btn sec" onclick="fav(${c})">${favs.has(c)?"❤️":"🤍"}</button>${m.draft?"":`<button class="btn" onclick="watch(${c})">🍿 Ko'rish</button>`}</div>
-  ${S.admin?`<div class="sec-t">⚙️ Admin</div><div class="row"><button class="btn sec sm" onclick="form(${c})">✏️ Tahrir</button><button class="btn sec sm" onclick="vid(${c})">🎥 Video</button><button class="btn sec sm" onclick="ntf(${c})">📣 Xabar</button><button class="btn bad sm" onclick="del(${c})">🗑</button></div>`:""}`)}
+  ${S.admin?`<div class="sec-t">⚙️ Admin</div><div class="row"><button class="btn sec sm" onclick="kinoForm(${c})">✏️ Tahrir</button><button class="btn sec sm" onclick="vid(${c})">🎥 Video</button><button class="btn sec sm" onclick="ntf(${c})">📣 Xabar</button><button class="btn bad sm" onclick="del(${c})">🗑</button></div>`:""}`)}
 function fav(c){favs.has(c)?favs.delete(c):favs.add(c);localStorage.setItem("favs",JSON.stringify([...favs]));detail(c);render()}
 function trailer(c){tg.openLink(get(c).trailer)}
 async function watch(c){const r=await fetch("/api/send",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,code:c})});const d=await r.json();
   if(d.ok)tg.close();else tg.showAlert(d.error==="sub"?"Avval kanallarga obuna bo'ling":"Xatolik")}
-function form(c){const m=c?get(c):{};
+function kinoForm(c){const m=c?get(c):{};
   open_(`<h2>${c?"Kinoni tahrirlash":"➕ Yangi kino"}</h2>
   <input id="f_title" placeholder="Nomi *" value="${esc(m.title)}"><input id="f_year" placeholder="Yili" value="${esc(m.year)}">
   <input id="f_genre" placeholder="Janr (vergul bilan: Drama, Jangari)" value="${esc(m.genre)}">
@@ -122,7 +122,7 @@ function del(c){tg.showConfirm("Kino o'chirilsinmi?",async ok=>{if(ok){await api
 async function loadAdmin(){S.stats=await api("stats");render()}
 function renderAdmin(){const s=S.stats;if(!s){$("main").innerHTML='<div class="empty">Yuklanmoqda...</div>';return}
   $("main").innerHTML=`<div class="stats"><div class="st"><b>${s.users}</b><span>👥 Foydalanuvchi</span></div><div class="st"><b>${s.new}</b><span>🆕 24 soatda</span></div><div class="st"><b>${s.movies}</b><span>🎬 Kinolar</span></div><div class="st"><b>${s.views}</b><span>👁 Ko'rishlar</span></div></div>
-  <button class="btn" onclick="form(0)">➕ Yangi kino qo'shish</button>
+  <button class="btn" onclick="kinoForm(0)">➕ Yangi kino qo'shish</button>
   <div class="sec-t">📢 Majburiy kanallar</div>
   ${s.channels.map(c=>`<div class="ch"><span>${esc(c.chat_id)}</span><button class="btn bad sm" style="flex:none;min-width:0" onclick="delch(this.dataset.i)" data-i="${esc(c.chat_id)}">✕</button></div>`).join("")||'<div class="cm" style="margin-bottom:8px">Kanal yo\'q</div>'}
   <input id="c_id" placeholder="@kanalnomi"><input id="c_link" placeholder="https://t.me/kanalnomi">
