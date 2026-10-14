@@ -32,3 +32,105 @@ textarea{min-height:80px;resize:vertical}
 .dh{display:flex;gap:14px;margin-bottom:12px}
 .dh .poster{width:110px;flex:none;font-size:30px}
 h2{margin:0 0 6px;font-size:20px}
+p{color:#cfcfe0;line-height:1.5;font-size:14px;margin:8px 0 14px}
+.row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.btn{flex:1;border:0;border-radius:14px;padding:13px;background:linear-gradient(90deg,var(--acc),var(--acc2));color:#fff;font-size:15px;font-weight:600;min-width:100px}
+.btn.sec{background:var(--card);color:var(--fg)}
+.btn.bad{background:#3a1c24;color:var(--bad)}
+.btn.sm{padding:10px;font-size:13px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.st{background:var(--card);border-radius:16px;padding:14px}
+.st b{display:block;font-size:24px}.st span{color:var(--hint);font-size:12px}
+.sec-t{margin:18px 0 8px;font-weight:700}
+.ch{display:flex;justify-content:space-between;align-items:center;background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:6px;font-size:14px}
+label{display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:12px;color:var(--hint)}
+label input{width:auto;margin:0}
+.hero{position:relative;border-radius:22px;overflow:hidden;aspect-ratio:16/11;background:linear-gradient(135deg,#3a1f7a,#8a2a5c);margin-bottom:18px;display:flex;align-items:flex-end}
+.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(to top,#0f0f17f2 8%,transparent 70%)}
+.hi{position:relative;z-index:2;padding:16px;width:100%}
+.badge{display:inline-block;background:var(--acc2);padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;margin-bottom:6px}
+.hero h3{margin:0 0 4px;font-size:22px}
+.sk{aspect-ratio:2/3;border-radius:16px;background:linear-gradient(90deg,#1b1b28,#26263a,#1b1b28);background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.stt{font-weight:700;margin:4px 0 12px;font-size:17px}
+.empty{text-align:center;color:var(--hint);padding:40px 0;grid-column:1/-1}
+.toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--ok);color:#000;padding:10px 18px;border-radius:20px;font-size:14px;z-index:20;display:none}
+</style></head><body>
+<h1>🎬 Kinolar olami</h1>
+<div id="main"><div class="grid"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div></div>
+<div class="nav" id="nav"></div>
+<div class="ov" id="ov"><div class="sheet" id="sh"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const tg=Telegram.WebApp;tg.ready();tg.expand();
+try{tg.setHeaderColor("#0f0f17");tg.setBackgroundColor("#0f0f17")}catch(e){}
+window.onerror=(m,u,l)=>{document.getElementById('main').innerHTML='<div class="empty">⚠️ Xatolik: '+m+' ('+l+')</div>'};
+const $=i=>document.getElementById(i);
+const H={"X-Init":tg.initData,"Content-Type":"application/json"};
+const S={movies:[],genres:[],admin:false,genre:"",tab:"all",q:"",stats:null};
+const favs=new Set(JSON.parse(localStorage.getItem("favs")||"[]"));
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const toast=t=>{const e=$("toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",2200)};
+async function api(action,d={}){const r=await fetch("/api/admin",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,action,...d})});return r.json()}
+async function load(){try{const r=await fetch(`/api/movies?q=${encodeURIComponent(S.q)}&genre=${encodeURIComponent(S.genre)}`,{headers:H});Object.assign(S,await r.json());render()}catch(e){$('main').innerHTML='<div class="empty">⚠️ Server javob bermadi. Biroz kutib qayta oching.</div>'}}
+function open_(h){$("sh").innerHTML=h;$("ov").classList.add("show")}
+function close_(){$("ov").classList.remove("show")}
+$("ov").onclick=e=>{if(e.target.id==="ov")close_()};
+function poster(m){return `<div class="poster">${m.poster?`<img src="${esc(m.poster)}" loading="lazy" onerror="this.remove()">`:"🎬"}${m.draft?'<b class="tag">Video yo\'q</b>':''}${m.rating?`<span class="rt">⭐${m.rating}</span>`:""}</div>`}
+function render(){
+  $("nav").innerHTML=[["all","🎬","Kinolar"],["fav","❤️","Sevimli"],...(S.admin?[["adm","⚙️","Admin"]]:[])]
+    .map(([t,i,l])=>`<div class="${S.tab===t?"on":""}" onclick="tab('${t}')"><span>${i}</span>${l}</div>`).join("");
+  if(S.tab==="adm")return renderAdmin();
+  const ms=S.movies.filter(m=>S.tab!=="fav"||favs.has(m.code));
+  const hero=(S.tab==="all"&&!S.q&&!S.genre&&ms.length)?(ms.find(m=>!m.draft)||ms[0]):null;
+  const rest=hero?ms.filter(m=>m!==hero):ms;
+  const hh=hero?`<div class="hero" onclick="detail(${hero.code})">${hero.poster?`<img src="${esc(hero.poster)}" onerror="this.remove()">`:""}<div class="hi"><span class="badge">🔥 Yangi</span><h3>${esc(hero.title)}</h3><div class="cm">${esc(hero.year)} · ${esc(hero.genre)} · ⭐${hero.rating||"—"}</div>${hero.draft?"":`<div class="row" style="margin:10px 0 0"><button class="btn" onclick="event.stopPropagation();watch(${hero.code})">🍿 Ko'rish</button></div>`}</div></div>`:"";
+  $("main").innerHTML=`<input id="s" placeholder="🔎 Kino qidirish..." value="${esc(S.q)}">
+  <div class="chips">${[["","Hammasi"],...S.genres.map(g=>[g,g])].map(([v,l])=>`<div class="chip ${S.genre===v?"on":""}" onclick="gen(this.dataset.v)" data-v="${esc(v)}">${esc(l)}</div>`).join("")}</div>
+  ${hh}<div class="stt">${S.tab==="fav"?"❤️ Sevimlilar":"🎞 Barcha kinolar"}</div><div class="grid">${rest.length||hero?rest.map(m=>`<div class="card" onclick="detail(${m.code})">${poster(m)}<div class="ct">${esc(m.title)}</div><div class="cm">${esc(m.year)} · ${esc((m.genre||"").split(",")[0])}</div></div>`).join(""):'<div class="empty">Hech narsa topilmadi 😕</div>'}</div>`;
+  const s=$("s");let t;s.oninput=()=>{clearTimeout(t);t=setTimeout(async()=>{S.q=s.value;await load();$("s").focus();$("s").setSelectionRange(99,99)},350)};
+}
+function tab(t){S.tab=t;t==="adm"?loadAdmin():render()}
+function gen(v){S.genre=v;load()}
+const get=c=>S.movies.find(m=>m.code==c);
+function detail(c){const m=get(c);
+  open_(`<div class="dh">${poster(m)}<div><h2>${esc(m.title)}</h2><div class="cm">📅 ${esc(m.year)}<br>🎭 ${esc(m.genre)}<br>⭐ ${m.rating||"—"} · 👁 ${m.views}<br>🔢 Kod: ${m.code}</div></div></div>
+  ${m.descr?`<p>${esc(m.descr)}</p>`:""}
+  <div class="row">${m.trailer?`<button class="btn sec" onclick="trailer(${c})">▶ Treyler</button>`:""}<button class="btn sec" onclick="fav(${c})">${favs.has(c)?"❤️":"🤍"}</button>${m.draft?"":`<button class="btn" onclick="watch(${c})">🍿 Ko'rish</button>`}</div>
+  ${S.admin?`<div class="sec-t">⚙️ Admin</div><div class="row"><button class="btn sec sm" onclick="form(${c})">✏️ Tahrir</button><button class="btn sec sm" onclick="vid(${c})">🎥 Video</button><button class="btn sec sm" onclick="ntf(${c})">📣 Xabar</button><button class="btn bad sm" onclick="del(${c})">🗑</button></div>`:""}`)}
+function fav(c){favs.has(c)?favs.delete(c):favs.add(c);localStorage.setItem("favs",JSON.stringify([...favs]));detail(c);render()}
+function trailer(c){tg.openLink(get(c).trailer)}
+async function watch(c){const r=await fetch("/api/send",{method:"POST",headers:H,body:JSON.stringify({initData:tg.initData,code:c})});const d=await r.json();
+  if(d.ok)tg.close();else tg.showAlert(d.error==="sub"?"Avval kanallarga obuna bo'ling":"Xatolik")}
+function form(c){const m=c?get(c):{};
+  open_(`<h2>${c?"Kinoni tahrirlash":"➕ Yangi kino"}</h2>
+  <input id="f_title" placeholder="Nomi *" value="${esc(m.title)}"><input id="f_year" placeholder="Yili" value="${esc(m.year)}">
+  <input id="f_genre" placeholder="Janr (vergul bilan: Drama, Jangari)" value="${esc(m.genre)}">
+  <textarea id="f_descr" placeholder="Qisqa tavsif">${esc(m.descr)}</textarea>
+  <input id="f_poster" placeholder="Poster rasmi havolasi (https://...)" value="${esc(m.poster)}">
+  <input id="f_trailer" placeholder="Treyler havolasi (YouTube)" value="${esc(m.trailer)}">
+  <label><input type="checkbox" id="f_notify" ${c?"":"checked"}> Video qo'shilgach obunachilarga treyler yuborish</label>
+  <button class="btn" onclick="save(${c||0})">💾 Saqlash</button>`)}
+async function save(c){const v=k=>$("f_"+k).value;
+  const d=await api("save",{code:c||null,title:v("title"),year:v("year"),genre:v("genre"),descr:v("descr"),poster:v("poster"),trailer:v("trailer"),notify:$("f_notify").checked});
+  if(!d.ok)return tg.showAlert(d.error||"Xatolik");
+  if(d.need_video){tg.showAlert("Saqlandi ✅ Endi botga kino videosini yuboring.",()=>tg.close())}else{close_();toast("Saqlandi ✅");load()}}
+async function vid(c){await api("video",{code:c});tg.showAlert("Botga o'ting va kino videosini yuboring.",()=>tg.close())}
+function ntf(c){tg.showConfirm("Hamma obunachilarga xabar yuborilsinmi?",async ok=>{if(ok){await api("notify",{code:c});close_();toast("Yuborilmoqda 📣")}})}
+function del(c){tg.showConfirm("Kino o'chirilsinmi?",async ok=>{if(ok){await api("delete",{code:c});close_();toast("O'chirildi");load()}})}
+async function loadAdmin(){S.stats=await api("stats");render()}
+function renderAdmin(){const s=S.stats;if(!s){$("main").innerHTML='<div class="empty">Yuklanmoqda...</div>';return}
+  $("main").innerHTML=`<div class="stats"><div class="st"><b>${s.users}</b><span>👥 Foydalanuvchi</span></div><div class="st"><b>${s.new}</b><span>🆕 24 soatda</span></div><div class="st"><b>${s.movies}</b><span>🎬 Kinolar</span></div><div class="st"><b>${s.views}</b><span>👁 Ko'rishlar</span></div></div>
+  <button class="btn" onclick="form(0)">➕ Yangi kino qo'shish</button>
+  <div class="sec-t">📢 Majburiy kanallar</div>
+  ${s.channels.map(c=>`<div class="ch"><span>${esc(c.chat_id)}</span><button class="btn bad sm" style="flex:none;min-width:0" onclick="delch(this.dataset.i)" data-i="${esc(c.chat_id)}">✕</button></div>`).join("")||'<div class="cm" style="margin-bottom:8px">Kanal yo\'q</div>'}
+  <input id="c_id" placeholder="@kanalnomi"><input id="c_link" placeholder="https://t.me/kanalnomi">
+  <button class="btn sec" onclick="addch()">➕ Kanal qo'shish</button>
+  <div class="sec-t">✉️ Hammaga xabar</div>
+  <textarea id="bc" placeholder="Xabar matni..."></textarea><button class="btn sec" onclick="bcast()">📤 Yuborish</button>`}
+async function addch(){const i=$("c_id").value,l=$("c_link").value;if(!i||!l)return toast("To'ldiring");await api("addch",{chat_id:i,link:l});toast("Qo'shildi ✅");loadAdmin()}
+async function delch(i){await api("delch",{chat_id:i});loadAdmin()}
+function bcast(){const t=$("bc").value;if(!t)return;tg.showConfirm("Hammaga yuborilsinmi?",async ok=>{if(ok){await api("broadcast",{text:t});$("bc").value="";toast("Yuborilmoqda 📤")}})}
+load();
+</script></body></html>
