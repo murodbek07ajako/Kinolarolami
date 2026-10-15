@@ -57,7 +57,9 @@ async def run(bot: Bot, send) -> tuple[int, int, int, int]:
 def announce_text(movie) -> str:
     e = html.escape
     lines = ["🆕 <b>Yangi kino qo'shildi!</b>\n"]
-    lines.append(f"🎬 <b>{e(movie['title'])}</b>" + (f" ({e(movie['year'])})" if movie["year"] else ""))
+    ep = f" — {movie['ep']}-qism" if movie["series_id"] and movie["ep"] else ""
+    lines.append(f"{svc.KIND_EMOJI.get(movie['kind'], '🎬')} <b>{e(movie['title'])}</b>{ep}"
+                 + (f" ({e(movie['year'])})" if movie["year"] else ""))
     if movie["genre"]:
         lines.append(f"🎭 {e(movie['genre'])}")
     if movie["country"]:
@@ -101,16 +103,41 @@ async def announce(bot: Bot, movie_id: int) -> None:
     )
 
 
+def _ranges(nums: list[int]) -> str:
+    """[1,2,3,5] -> '1–3, 5'"""
+    nums = sorted(set(nums))
+    out, i = [], 0
+    while i < len(nums):
+        j = i
+        while j + 1 < len(nums) and nums[j + 1] == nums[j] + 1:
+            j += 1
+        out.append(str(nums[i]) if i == j else f"{nums[i]}–{nums[j]}")
+        i = j + 1
+    return ", ".join(out)
+
+
 def announce_many_text(movies) -> str:
+    """Yakka kinolar + seriallarning yangi qismlari — bitta umumiy matn."""
     e = html.escape
-    lines = [f"🆕 <b>{len(movies)} ta yangi kino qo'shildi!</b>\n"]
-    for m in movies[:12]:
+    singles = [m for m in movies if not m["series_id"]]
+    by_series: dict[int, list] = {}
+    for m in movies:
+        if m["series_id"]:
+            by_series.setdefault(m["series_id"], []).append(m)
+    lines = ["🆕 <b>Yangi kontent qo'shildi!</b>\n"]
+    for m in singles[:12]:
         lines.append(
-            f"• <b>{e(m['title'])}</b>" + (f" ({e(m['year'])})" if m["year"] else "")
+            f"• {svc.KIND_EMOJI.get(m['kind'], '🎬')} <b>{e(m['title'])}</b>" + (f" ({e(m['year'])})" if m["year"] else "")
             + (f" — {e(m['genre'])}" if m["genre"] else "")
         )
-    if len(movies) > 12:
-        lines.append(f"…va yana {len(movies) - 12} ta")
+    if len(singles) > 12:
+        lines.append(f"…va yana {len(singles) - 12} ta")
+    for sid, eps in list(by_series.items())[:12]:
+        m = eps[0]
+        lines.append(
+            f"• {svc.KIND_EMOJI.get(m['kind'], '📺')} <b>{e(m['title'])}</b> — "
+            f"{_ranges([x['ep'] or 0 for x in eps])}-qism (kod: <code>{db.series_code(m['kind'], sid)}</code>)"
+        )
     lines.append("\n👇 Tomosha qilish uchun katalogni oching")
     return "\n".join(lines)[:4000]
 
@@ -133,14 +160,15 @@ async def announce_many(bot: Bot, movie_ids: list[int]) -> None:
         ok, blocked, failed, total = await run(bot, send)
     await svc.notify_admins(
         bot,
-        f"📣 <b>{len(movies)} ta kino</b> e'lon qilindi\n\n"
+        f"📣 <b>{len(movies)} ta yangi qism/kino</b> e'lon qilindi\n\n"
         f"📨 Yetkazildi: <b>{ok}</b>\n😶 Bloklagan: <b>{blocked}</b>\n⚠️ Xatolik: <b>{failed}</b>\n👥 Jami: <b>{total}</b>",
     )
 
 
-async def publish_all(bot: Bot, notify: bool) -> int:
-    """Kutilayotgan hamma kinoni chiqaradi. notify=True bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
-    ids = await db.publish_pending()
+async def publish_all(bot: Bot, notify: bool, scope=None) -> int:
+    """Kutilayotgan kinolarni chiqaradi (scope: hammasi / yakka kinolar / bitta serial).
+    notify=True bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
+    ids = await db.publish_pending(scope)
     if ids and notify:
         _announced.update(ids)
 

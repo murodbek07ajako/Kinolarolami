@@ -16,6 +16,7 @@ import broadcast
 import services as svc
 
 SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
+SINGLE_KINDS = ("kino", "multfilm", "anime")
 DRAFT_LIMITS = {"title": 120, "description": 800, "year": 4, "genre": 100, "country": 60, "language": 60, "quality": 20}
 
 
@@ -59,8 +60,13 @@ def _bad(msg: str) -> web.Response:
 
 
 def _brief(r) -> dict:
+    """Katalog kartochkasi. t='m' — kino, t='s' — qismli (serial/multfilm/anime); fk — saralanganlar kaliti."""
+    t = r["t"] if "t" in r.keys() else "m"
     return {
-        "id": r["id"], "title": r["title"], "year": r["year"], "genre": r["genre"],
+        "t": t, "id": r["id"], "fk": r["fk"] if "fk" in r.keys() else r["id"],
+        "kind": r["kind"], "code": db.series_code(r["kind"], r["id"]) if t == "s" else str(r["id"]),
+        "eps": r["eps"] if "eps" in r.keys() else 0,
+        "title": r["title"], "year": r["year"], "genre": r["genre"],
         "country": r["country"], "quality": r["quality"], "views": r["views"],
         "poster": bool(r["poster_id"]),
     }
@@ -108,9 +114,9 @@ async def api_movies(request: web.Request):
     offset = max(int(q.get("offset", "0") or 0), 0)
     limit = min(max(int(q.get("limit", "20") or 20), 1), 50)
     fav_user = user["id"] if sort == "fav" else None
-    rows, total = await db.search_movies(
+    rows, total = await db.search_items(
         q.get("q", "")[:80], q.get("genre", "")[:40], "new" if sort == "fav" else sort,
-        limit, offset, fav_user,
+        limit, offset, fav_user, q.get("kind", ""),
     )
     data = {"items": [_brief(r) for r in rows], "total": total}
     if offset == 0:
@@ -129,6 +135,26 @@ async def api_movie(request: web.Request):
     return web.json_response(d)
 
 
+async def api_series(request: web.Request):
+    """Qismli kontent kartochkasi: ma'lumot + chiqarilgan qismlar ro'yxati."""
+    user = _auth(request)
+    ser = await db.get_series(int(request.match_info["id"]))
+    if not ser:
+        raise web.HTTPNotFound(reason="not found")
+    is_admin = user["id"] in config.ADMIN_IDS
+    eps = await db.episodes(ser["id"], live_only=not is_admin)
+    if not eps:
+        raise web.HTTPNotFound(reason="not found")
+    return web.json_response({
+        "t": "s", "id": ser["id"], "fk": -ser["id"], "kind": ser["kind"],
+        "code": db.series_code(ser["kind"], ser["id"]),
+        "title": ser["title"], "year": ser["year"], "genre": ser["genre"], "country": ser["country"],
+        "language": ser["language"], "description": ser["description"], "quality": "",
+        "views": sum(e["views"] for e in eps), "poster": bool(ser["poster_id"]),
+        "eps": [{"id": e["id"], "ep": e["ep"], "views": e["views"], "live": e["status"] == "live"} for e in eps],
+    })
+
+
 async def api_send(request: web.Request):
     user = _auth(request)
     body = await request.json()
@@ -140,25 +166,36 @@ async def api_send(request: web.Request):
 async def api_fav(request: web.Request):
     user = _auth(request)
     body = await request.json()
-    mid = int(body.get("id", 0))
-    if not await db.get_movie(mid):
+    key = int(body.get("id", 0))  # kino: musbat id, qismli kontent: manfiy (-serial id)
+    exists = await db.get_series(-key) if key < 0 else await db.get_movie(key)
+    if not exists:
         raise web.HTTPNotFound(reason="not found")
-    return web.json_response({"fav": await db.toggle_fav(user["id"], mid)})
+    return web.json_response({"fav": await db.toggle_fav(user["id"], key)})
 
 
-async def api_poster(request: web.Request):
-    mid = int(request.match_info["id"])
-    movie = await db.get_movie(mid)
-    if not movie or not movie["poster_id"]:
-        raise web.HTTPNotFound(reason="no poster")
+async def _poster_response(request: web.Request, poster_id: str):
     config.POSTER_DIR.mkdir(parents=True, exist_ok=True)
-    key = hashlib.md5(movie["poster_id"].encode()).hexdigest()
+    key = hashlib.md5(poster_id.encode()).hexdigest()
     path = config.POSTER_DIR / f"{key}.jpg"
     if not path.exists():
         tmp = path.with_suffix(".part")
-        await request.app["bot"].download(movie["poster_id"], destination=tmp)
+        await request.app["bot"].download(poster_id, destination=tmp)
         tmp.replace(path)
     return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400", "Content-Type": "image/jpeg"})
+
+
+async def api_poster(request: web.Request):
+    movie = await db.get_movie(int(request.match_info["id"]))
+    if not movie or not movie["poster_id"]:
+        raise web.HTTPNotFound(reason="no poster")
+    return await _poster_response(request, movie["poster_id"])
+
+
+async def api_sposter(request: web.Request):
+    ser = await db.get_series(int(request.match_info["id"]))
+    if not ser or not ser["poster_id"]:
+        raise web.HTTPNotFound(reason="no poster")
+    return await _poster_response(request, ser["poster_id"])
 
 
 # ───────────── Admin API ─────────────
@@ -175,10 +212,14 @@ async def _settings_payload() -> dict:
         {"id": r["id"], "title": r["title"] or str(r["chat_id"]), "link": r["link"]}
         for r in await db.list_channels()
     ]
-    out["sources"] = [
-        {"id": r["chat_id"], "title": r["title"] or str(r["chat_id"])}
-        for r in await db.list_sources()
-    ]
+    out["sources"] = []
+    for r in await db.list_sources():
+        ser = await db.get_series(r["series_id"]) if r["series_id"] else None
+        out["sources"].append({
+            "id": r["chat_id"], "title": r["title"] or str(r["chat_id"]), "kind": r["kind"],
+            "series_id": r["series_id"],
+            "series": ({"title": ser["title"], "code": db.series_code(ser["kind"], ser["id"])} if ser else None),
+        })
     return out
 
 
@@ -198,22 +239,50 @@ async def api_admin_setting(request: web.Request):
 
 
 async def api_admin_channel_add(request: web.Request):
+    """Majburiy obuna kanali qo'shish."""
     _admin(request)
     body = await request.json()
-    kind = body.get("kind")
     ref = svc.parse_ref(str(body.get("ref", "")))
-    if kind not in ("sub", "source") or ref is None:
+    if body.get("kind") != "sub" or ref is None:
         return _bad("Kanalni @username yoki -100... ID ko'rinishida yozing")
     try:
-        chat_id, title, link = await svc.resolve_channel(
-            request.app["bot"], ref, need_link=(kind == "sub"), channel_only=(kind == "source")
-        )
+        chat_id, title, link = await svc.resolve_channel(request.app["bot"], ref, need_link=True)
     except ValueError as e:
         return _bad(str(e))
-    if kind == "sub":
-        await db.add_channel(chat_id, title, link)
+    await db.add_channel(chat_id, title, link)
+    return web.json_response(await _settings_payload())
+
+
+async def api_admin_source_add(request: web.Request):
+    """Avto-yuklash kanalini ulaydi. kind: kino|multfilm|anime|serial; parts=true yoki serial → qismli
+    (bunda serial ma'lumotlari shu yerda bir marta kiritiladi, qismlar kanaldan raqam bo'yicha olinadi)."""
+    _admin(request)
+    body = await request.json()
+    ref = svc.parse_ref(str(body.get("ref", "")))
+    kind = body.get("kind")
+    if kind not in db.KINDS:
+        return _bad("Turini tanlang")
+    if ref is None:
+        return _bad("Kanalni @username yoki -100... ID ko'rinishida yozing")
+    parts = bool(body.get("parts")) or kind == "serial"
+    meta = None
+    if parts:
+        try:
+            meta = _clean_meta(body)
+        except ValueError as e:
+            return _bad(str(e))
+    try:
+        chat_id, title, _ = await svc.resolve_channel(request.app["bot"], ref, need_link=False, channel_only=True)
+    except ValueError as e:
+        return _bad(str(e))
+    if parts:
+        old = await db.get_source(chat_id)
+        if old and old["series_id"] and await db.get_series(old["series_id"]):
+            return _bad("Bu kanal allaqachon boshqa serialga ulangan. Avval uni olib tashlang.")
+        sid = await db.add_series({**meta, "kind": kind})
+        await db.add_source(chat_id, title, kind, sid)
     else:
-        await db.add_source(chat_id, title)
+        await db.add_source(chat_id, title, kind, None)
     return web.json_response(await _settings_payload())
 
 
@@ -231,18 +300,30 @@ async def api_admin_channel_del(request: web.Request):
 
 
 async def api_admin_pending(request: web.Request):
+    """Qo'shishga tayyor kontent: guruhlar (kino/multfilm/anime ro'yxatlari va har serial alohida)."""
     _admin(request)
-    return web.json_response({"items": [
-        {"id": r["id"], "title": r["title"], "year": r["year"], "genre": r["genre"]}
-        for r in await db.pending_movies()
-    ]})
+    groups = []
+    for g in await db.pending_groups():
+        ser = g["series"]
+        groups.append({
+            "key": g["key"], "kind": g["kind"], "count": len(g["rows"]),
+            "series": ({"id": ser["id"], "title": ser["title"], "code": db.series_code(ser["kind"], ser["id"])}
+                       if ser else None),
+            "items": [{"id": r["id"], "title": r["title"], "year": r["year"], "genre": r["genre"], "ep": r["ep"]}
+                      for r in g["rows"]],
+        })
+    return web.json_response({"groups": groups, "total": sum(g["count"] for g in groups)})
 
 
 async def api_admin_publish(request: web.Request):
-    """Kutilayotgan hamma kinoni chiqaradi; notify=true bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
+    """Kutilayotganlarni chiqaradi. scope: all | single | single:<tur> | s:<serial id>.
+    notify=true bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
     _admin(request)
     body = await request.json()
-    n = await broadcast.publish_all(request.app["bot"], bool(body.get("notify")))
+    try:
+        n = await broadcast.publish_all(request.app["bot"], bool(body.get("notify")), str(body.get("scope") or "all"))
+    except ValueError:
+        return _bad("Noto'g'ri doira")
     return web.json_response({"published": n})
 
 
@@ -254,6 +335,53 @@ async def api_admin_movie_get(request: web.Request):
     return web.json_response({"movie": {"id": m["id"], **{k: m[k] or "" for k in db.META_FIELDS}}})
 
 
+async def api_admin_series_get(request: web.Request):
+    _admin(request)
+    ser = await db.get_series(int(request.match_info["id"]))
+    if not ser:
+        raise web.HTTPNotFound(reason="not found")
+    eps = await db.episodes(ser["id"], live_only=False)
+    return web.json_response({
+        "series": {"id": ser["id"], "kind": ser["kind"], "code": db.series_code(ser["kind"], ser["id"]),
+                   **{k: (ser[k] if k in ser.keys() else "") or "" for k in db.META_FIELDS}},
+        "eps": [{"id": e["id"], "ep": e["ep"], "live": e["status"] == "live"} for e in eps],
+    })
+
+
+async def api_admin_series_update(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    sid = int(body.get("id", 0))
+    if not await db.get_series(sid):
+        raise web.HTTPNotFound(reason="not found")
+    try:
+        d = _clean_meta(body)
+    except ValueError as e:
+        return _bad(str(e))
+    await db.update_series_meta(sid, d)
+    return web.json_response({"ok": True})
+
+
+async def api_admin_series_del(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    sid = int(body.get("id", 0))
+    if not await db.get_series(sid):
+        raise web.HTTPNotFound(reason="not found")
+    await db.delete_series(sid)
+    return web.json_response({"ok": True})
+
+
+async def api_admin_series_list(request: web.Request):
+    """Qo'lda qism qo'shishda serial tanlash ro'yxati."""
+    _admin(request)
+    return web.json_response({"items": [
+        {"id": r["id"], "kind": r["kind"], "code": db.series_code(r["kind"], r["id"]), "title": r["title"],
+         "eps": r["eps"], "last_ep": r["last_ep"] or 0}
+        for r in await db.list_series()
+    ]})
+
+
 async def api_admin_movie_update(request: web.Request):
     _admin(request)
     body = await request.json()
@@ -261,7 +389,7 @@ async def api_admin_movie_update(request: web.Request):
     if not await db.get_movie(mid):
         raise web.HTTPNotFound(reason="not found")
     try:
-        d = _clean_draft(body)
+        d = _clean_meta(body)
     except ValueError as e:
         return _bad(str(e))
     await db.replace_movie_meta(mid, d)
@@ -278,19 +406,49 @@ async def api_admin_movie_del(request: web.Request):
     return web.json_response({"ok": True})
 
 
-def _clean_draft(body: dict) -> dict:
+def _clean_meta(body: dict) -> dict:
     out = {}
     for key, limit in DRAFT_LIMITS.items():
         value = re.sub(r"[ \t]+", " ", str(body.get(key) or "")).strip()[:limit]
         if value:
             out[key] = value
     if not out.get("title"):
-        raise ValueError("Kino nomini kiriting")
+        raise ValueError("Nomini kiriting")
     if out.get("year") and not re.fullmatch(r"(18|19|20)\d{2}", out["year"]):
         raise ValueError("Yil noto'g'ri (masalan: 2024)")
     if out.get("genre"):
         out["genre"] = ", ".join(g.strip() for g in out["genre"].split(",") if g.strip())
     return out
+
+
+async def _clean_draft(body: dict) -> dict:
+    """Qo'lda qo'shish qoralamasi. Yakka kino/multfilm/anime yoki qismli kontentning bitta qismi."""
+    kind = body.get("kind") or "kino"
+    if kind not in db.KINDS:
+        raise ValueError("Turini tanlang")
+    parts = bool(body.get("parts")) or kind == "serial"
+    if not parts:
+        out = _clean_meta(body)
+        out["kind"] = kind
+        return out
+    try:
+        ep = int(body.get("ep") or 0)
+    except (TypeError, ValueError):
+        ep = 0
+    if not 1 <= ep <= 9999:
+        raise ValueError("Qism raqamini kiriting (masalan: 1)")
+    sid = int(body.get("series_id") or 0)
+    if sid:
+        ser = await db.get_series(sid)
+        if not ser:
+            raise ValueError("Serial topilmadi")
+    else:  # yangi serial yaratiladi (qismi chiqmaguncha katalogda ko'rinmaydi)
+        meta = _clean_meta(body)
+        sid = await db.add_series({**meta, "kind": kind})
+        ser = await db.get_series(sid)
+    if await db.episode_by_no(sid, ep):
+        raise ValueError(f"{ep}-qism allaqachon bor")
+    return {"title": ser["title"], "kind": ser["kind"], "series_id": sid, "ep": ep}
 
 
 async def api_admin_draft_get(request: web.Request):
@@ -302,11 +460,13 @@ async def api_admin_draft_save(request: web.Request):
     """Mini App'da kiritilgan ma'lumotlarni saqlaydi va botda adminga «endi videoni yuboring» deb yozadi."""
     user = _admin(request)
     try:
-        draft = _clean_draft(await request.json())
+        draft = await _clean_draft(await request.json())
     except ValueError as e:
         return _bad(str(e))
     await db.save_draft(user["id"], draft)
     title = html.escape(draft["title"]) + (f" ({draft['year']})" if draft.get("year") else "")
+    if draft.get("series_id"):
+        title += f" — {draft['ep']}-qism"
     text = (
         "✅ <b>Kino ma'lumotlari saqlandi!</b>\n\n"
         f"🎬 <b>{title}</b>\n\n"
@@ -338,6 +498,8 @@ def make_app(bot) -> web.Application:
     r.add_get("/api/me", api_me)
     r.add_get("/api/movies", api_movies)
     r.add_get(r"/api/movie/{id:\d+}", api_movie)
+    r.add_get(r"/api/series/{id:\d+}", api_series)
+    r.add_get(r"/api/sposter/{id:\d+}", api_sposter)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)
@@ -346,6 +508,11 @@ def make_app(bot) -> web.Application:
     r.add_get("/api/admin/settings", api_admin_settings)
     r.add_post("/api/admin/setting", api_admin_setting)
     r.add_post("/api/admin/channel", api_admin_channel_add)
+    r.add_post("/api/admin/source", api_admin_source_add)
+    r.add_get("/api/admin/series", api_admin_series_list)
+    r.add_get(r"/api/admin/series/{id:\d+}", api_admin_series_get)
+    r.add_post("/api/admin/series/update", api_admin_series_update)
+    r.add_post("/api/admin/series/delete", api_admin_series_del)
     r.add_post("/api/admin/channel/delete", api_admin_channel_del)
     r.add_get("/api/admin/pending", api_admin_pending)
     r.add_post("/api/admin/publish", api_admin_publish)

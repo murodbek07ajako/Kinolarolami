@@ -46,9 +46,21 @@ async def ask_subscribe(bot: Bot, chat_id: int, channels: list, movie_id: int = 
     await bot.send_message(chat_id, SUB_TEXT, reply_markup=kb.sub_kb(channels, movie_id))
 
 
+KIND_EMOJI = {"kino": "🎬", "multfilm": "🧸", "serial": "📺", "anime": "🎌"}
+
+
+def code_of(movie) -> str:
+    """Kino kodi: oddiy raqam; qismlilar uchun s.1 / m.1 / a.1."""
+    if movie["series_id"]:
+        return db.series_code(movie["kind"], movie["series_id"])
+    return str(movie["id"])
+
+
 def caption(movie, bot_username: str) -> str:
     e = html.escape
-    head = f"🎬 <b>{e(movie['title'])}</b>" + (f" ({e(movie['year'])})" if movie["year"] else "")
+    ep = f" — {movie['ep']}-qism" if movie["series_id"] and movie["ep"] else ""
+    head = f"{KIND_EMOJI.get(movie['kind'], '🎬')} <b>{e(movie['title'])}</b>{ep}" + (
+        f" ({e(movie['year'])})" if movie["year"] else "")
     lines = [head, ""]
     if movie["genre"]:
         lines.append(f"🎭 <b>Janr:</b> {e(movie['genre'])}")
@@ -59,7 +71,7 @@ def caption(movie, bot_username: str) -> str:
     if movie["quality"]:
         lines.append(f"📺 <b>Sifat:</b> {e(movie['quality'])}")
     lines.append(f"👁 <b>Ko'rishlar:</b> {movie['views']}")
-    lines.append(f"🔢 <b>Kod:</b> <code>{movie['id']}</code>")
+    lines.append(f"🔢 <b>Kod:</b> <code>{code_of(movie)}</code>")
     footer = f"\n🤖 @{bot_username}"
     base = "\n".join(lines) + footer
     if movie["description"]:
@@ -75,7 +87,7 @@ async def send_movie(bot: Bot, chat_id: int, user_id: int, movie) -> None:
     me = await bot.me()
     protect = await db.get_setting("protect_content", "0") == "1"
     fav = await db.is_fav(user_id, movie["id"])
-    markup = kb.movie_kb(movie["id"], fav, me.username, movie["title"])
+    markup = kb.movie_kb(movie["id"], fav, me.username, movie["title"], episode=bool(movie["series_id"]))
     cap = caption(movie, me.username)
     if movie["file_type"] == "video":
         await bot.send_video(chat_id, movie["file_id"], caption=cap, reply_markup=markup,

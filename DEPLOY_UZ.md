@@ -59,19 +59,29 @@ Admin bo'lsangiz katalog tepasida **⚙️** tugmasi chiqadi:
 - 📋 Kinolar — ⏳ kutilayotganlar + «Hammasini chiqarish», qidirish, o'chirish
 - ⚙️ Sozlama — himoya, majburiy obuna, kanallar
 
-## Kanaldan avto-yuklash
-1. `/admin` → «📥 Avto-yuklash kanali» orqali kanalingizni ulang (bot kanalda **admin** bo'lsin).
-2. Kanalga video tashlab, izohiga yozing:
-```
-Qasoskor
-Yili: 2023
-Janri: Jangari, Drama
-Davlati: AQSH
-```
-3. Bot postni o'zi o'qiydi va **«kutilmoqda»** holatida saqlaydi — foydalanuvchilar hali KO'RMAYDI. Sizga "⏳ Kutilmoqda: +N ta kino" xabari keladi.
-4. **Kanalda oldindan turgan kinolar**: kanaldagi postlarni botning o'ziga *forward* qiling (bir nechtasini belgilab birdan). Bot ularni ham o'qiydi, takrorlarini o'tkazib yuboradi.
-5. Hammasi tayyor bo'lgach: `/admin` → «⏳ Kutilayotganlar» yoki katalogdagi ⚙️ → 📋 Kinolar → **«Hammasini chiqarish»**. Kinolar katalogga chiqadi va foydalanuvchilarga **bitta umumiy xabar** ketadi («Xabarsiz chiqarish» ham bor).
-6. Poster videoning Telegramdagi kadridan olinadi. Yoqmasa: `/poster KOD` yozib rasm yuboring.
-7. Post izohini kanalda tahrirlasangiz, bot ma'lumotni yangilaydi.
+## Bo'limlar: Kino, Multfilm, Anime, Serial
+Katalogda tepada bo'limlar bor (Hammasi / Kino / Multfilm / Serial / Anime).
+
+**Kodlar:** kino — oddiy raqam (`12`), serial — `s.1`, qismli multfilm — `m.1`, qismli anime — `a.1`.
+Foydalanuvchi botga `s.1` yozsa, bot «Katalogda ochish» tugmasini beradi. Katalog qidiruvda `s.1` ni topib, qismlar tugmalarini (1, 2, 3...) ko'rsatadi. Qism bosilsa — botga yuboriladi.
+
+## Kanaldan avto-yuklash (⚙️ → 📥 Avto)
+Ichida ikkita tugma bor:
+- **⚙️ Sozlamalar** — kanal ulash. Botni kanalga ADMIN qiling, kanal @username ini yozing va turini tanlang:
+  - **Kino / Multfilm / Anime (qismsiz):** kanalga video tashlab, izohiga yozing:
+    ```
+    Qasoskor
+    Yili: 2023
+    Janri: Jangari, Drama
+    Davlati: AQSH
+    ```
+  - **Serial** (yoki «Qismli» yoqilgan multfilm/anime): har serial uchun ALOHIDA kanal. Serial nomi, yili, janri va hokazolarni ulayotganda bir marta kiritasiz. Keyin kanalga qismlarni tashlaysiz, **video izohiga faqat qism raqamini** yozing: `1`, `2`, `3`... (`3-qism` ham bo'ladi). Raqam yozilmasa bot sizga ogohlantirish yuboradi.
+- **✅ Qo'shishga tayyor** — kanaldan kelganlar shu yerda yig'iladi: «Kinolar — 12 ta», «Qasoskorlar (s.1) — 8 qism». Guruh ustiga bossangiz ro'yxati ochiladi. Har guruhni alohida chiqarish yoki hammasini birdan chiqarish mumkin. Chiqarilganda foydalanuvchilarga **bitta umumiy xabar** ketadi («Xabarsiz» ham bor).
+
+Kanalda oldindan turgan kontent: postlarni botning o'ziga **forward** qiling (qismli kanaldan forward qilsangiz qism sifatida o'qiladi).
+Poster videoning Telegramdagi kadridan olinadi. Almashtirish: `/poster 12` yoki `/poster s.1` va rasm yuboring.
+
+## Qo'lda qo'shish (⚙️ → 🎬 Qo'shish)
+Avval turini tanlaysiz (Kino / Multfilm / Anime / Serial). Multfilm va anime uchun «Qismli» tugmasi bor. Qismli bo'lsa mavjud serialni tanlab qism raqamini yozasiz (yoki yangi yaratasiz). Saqlagach botga videoni yuborasiz.
 
 ⚠️ Yuklab bo'lgach zaxira nusxa oling — Render qayta ishga tushsa baza o'chadi (bot zaxirani o'zi ham yuborib turadi).

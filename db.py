@@ -38,11 +38,30 @@ CREATE TABLE IF NOT EXISTS movies(
   created_at INTEGER NOT NULL,
   src_chat INTEGER,
   src_msg INTEGER,
-  status TEXT NOT NULL DEFAULT 'live'
+  status TEXT NOT NULL DEFAULT 'live',
+  kind TEXT NOT NULL DEFAULT 'kino',
+  series_id INTEGER,
+  ep INTEGER
+);
+CREATE TABLE IF NOT EXISTS series(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL DEFAULT 'serial',
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  year TEXT NOT NULL DEFAULT '',
+  genre TEXT NOT NULL DEFAULT '',
+  genre_lc TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT '',
+  poster_id TEXT NOT NULL DEFAULT '',
+  search_text TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sources(
   chat_id INTEGER PRIMARY KEY,
-  title TEXT NOT NULL DEFAULT ''
+  title TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'kino',
+  series_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS drafts(
   admin_id INTEGER PRIMARY KEY,
@@ -99,6 +118,18 @@ async def _migrate() -> None:
             await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} INTEGER")
     if "status" not in cols:
         await _db.execute("ALTER TABLE movies ADD COLUMN status TEXT NOT NULL DEFAULT 'live'")
+    for name, ddl in (("kind", "TEXT NOT NULL DEFAULT 'kino'"), ("series_id", "INTEGER"), ("ep", "INTEGER")):
+        if name not in cols:
+            await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} {ddl}")
+    scols = {r["name"] for r in await _all("PRAGMA table_info(sources)")}
+    if "kind" not in scols:
+        await _db.execute("ALTER TABLE sources ADD COLUMN kind TEXT NOT NULL DEFAULT 'kino'")
+    if "series_id" not in scols:
+        await _db.execute("ALTER TABLE sources ADD COLUMN series_id INTEGER")
+    await _db.execute("CREATE INDEX IF NOT EXISTS idx_movies_series ON movies(series_id)")
+    await _db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_ep ON movies(series_id, ep) WHERE series_id IS NOT NULL"
+    )
     # Bir kanal postidan bitta kino (takroriy qo'shilishdan himoya)
     await _db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_src ON movies(src_chat, src_msg) WHERE src_chat IS NOT NULL"
@@ -225,13 +256,15 @@ async def add_movie(d: dict) -> int:
     search, genre_lc = _derive(d)
     return await _run(
         """INSERT INTO movies(title, description, year, genre, genre_lc, country, language, quality,
-                              file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg, status)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                              file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg, status,
+                              kind, series_id, ep)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""), genre_lc,
             d.get("country", ""), d.get("language", ""), d.get("quality", ""),
             d["file_id"], d.get("file_type", "video"), d.get("poster", ""), search, int(time.time()),
             d.get("src_chat"), d.get("src_msg"), d.get("status", "live"),
+            d.get("kind", "kino"), d.get("series_id"), d.get("ep"),
         ),
     )
 
@@ -276,12 +309,198 @@ async def pending_movies():
     return await _all("SELECT * FROM movies WHERE status='pending' ORDER BY id")
 
 
-async def publish_pending() -> list[int]:
-    """Barcha kutilayotgan kinolarni chiqaradi (live). Chiqarilgan kinolar id ro'yxatini qaytaradi."""
-    ids = [r["id"] for r in await pending_movies()]
+def _scope_sql(scope) -> tuple[str, tuple]:
+    """Chiqarish doirasi: None/'all' | 'single' | 'single:<tur>' | 's:<serial id>'."""
+    if not scope or scope == "all":
+        return "", ()
+    if scope == "single":
+        return " AND series_id IS NULL", ()
+    if scope.startswith("single:"):
+        return " AND series_id IS NULL AND kind=?", (scope.split(":", 1)[1],)
+    if scope.startswith("s:") and scope[2:].isdigit():
+        return " AND series_id=?", (int(scope[2:]),)
+    raise ValueError("bad scope")
+
+
+async def publish_pending(scope=None) -> list[int]:
+    """Kutilayotgan kinolarni (butun yoki doira bo'yicha) chiqaradi. Chiqarilgan id'lar ro'yxatini qaytaradi."""
+    extra, params = _scope_sql(scope)
+    ids = [r["id"] for r in await _all(f"SELECT id FROM movies WHERE status='pending'{extra} ORDER BY id", params)]
     if ids:
-        await _run("UPDATE movies SET status='live' WHERE status='pending'")
+        await _run(f"UPDATE movies SET status='live' WHERE status='pending'{extra}", params)
     return ids
+
+
+# ───────────── Qismli kontent (serial / multfilm / anime) ─────────────
+KIND_PREFIX = {"serial": "s", "multfilm": "m", "anime": "a"}
+PREFIX_KIND = {v: k for k, v in KIND_PREFIX.items()}
+KINDS = ("kino", "multfilm", "serial", "anime")
+
+
+def series_code(kind: str, sid: int) -> str:
+    return f"{KIND_PREFIX.get(kind, 's')}.{sid}"
+
+
+def parse_series_code(text: str):
+    """'s.12' / 'M.3' -> (tur, id) yoki None."""
+    import re
+    m = re.fullmatch(r"([sma])\s*\.\s*(\d+)", (text or "").strip().lower())
+    return (PREFIX_KIND[m.group(1)], int(m.group(2))) if m else None
+
+
+async def add_series(d: dict) -> int:
+    search, genre_lc = _derive(d)
+    return await _run(
+        """INSERT INTO series(kind, title, description, year, genre, genre_lc, country, language,
+                              poster_id, search_text, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+        (d.get("kind", "serial"), d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""),
+         genre_lc, d.get("country", ""), d.get("language", ""), d.get("poster", ""), search, int(time.time())),
+    )
+
+
+async def get_series(sid: int):
+    return await _one("SELECT * FROM series WHERE id=?", (sid,))
+
+
+async def list_series():
+    return await _all(
+        """SELECT s.*, (SELECT COUNT(*) FROM movies e WHERE e.series_id=s.id) AS eps,
+                  (SELECT MAX(ep) FROM movies e WHERE e.series_id=s.id) AS last_ep
+           FROM series s ORDER BY s.id DESC"""
+    )
+
+
+async def update_series_meta(sid: int, d: dict) -> None:
+    """Serial ma'lumotlarini to'liq almashtiradi va qismlardagi nusxalarni ham yangilaydi."""
+    cur = {k: (d.get(k) or "") for k in META_FIELDS}
+    search, genre_lc = _derive(cur)
+    await _db.execute(
+        """UPDATE series SET title=?, description=?, year=?, genre=?, genre_lc=?, country=?, language=?,
+                             search_text=? WHERE id=?""",
+        (cur["title"], cur["description"], cur["year"], cur["genre"], genre_lc, cur["country"],
+         cur["language"], search, sid),
+    )
+    await _db.execute(
+        """UPDATE movies SET title=?, description=?, year=?, genre=?, genre_lc=?, country=?, language=?,
+                             search_text=? WHERE series_id=?""",
+        (cur["title"], cur["description"], cur["year"], cur["genre"], genre_lc, cur["country"],
+         cur["language"], search, sid),
+    )
+    await _db.commit()
+
+
+async def set_series_poster(sid: int, poster_id: str) -> None:
+    await _run("UPDATE series SET poster_id=? WHERE id=?", (poster_id, sid))
+
+
+async def delete_series(sid: int) -> None:
+    await _db.execute("DELETE FROM movies WHERE series_id=?", (sid,))
+    await _db.execute("DELETE FROM favorites WHERE movie_id=?", (-sid,))
+    await _db.execute("DELETE FROM sources WHERE series_id=?", (sid,))
+    await _db.execute("DELETE FROM series WHERE id=?", (sid,))
+    await _db.commit()
+
+
+async def episodes(sid: int, live_only: bool = True):
+    extra = " AND status='live'" if live_only else ""
+    return await _all(f"SELECT * FROM movies WHERE series_id=?{extra} ORDER BY ep", (sid,))
+
+
+async def set_episode_no(mid: int, ep: int) -> None:
+    await _run("UPDATE movies SET ep=? WHERE id=?", (ep, mid))
+
+
+async def episode_by_no(sid: int, ep: int):
+    return await _one("SELECT * FROM movies WHERE series_id=? AND ep=?", (sid, ep))
+
+
+async def search_series(q: str, limit: int = 5):
+    """Botdagi matnli qidiruv uchun: kamida bitta chiqarilgan qismi bor seriallar."""
+    where, params = [], []
+    for w in norm(q).split():
+        where.append("s.search_text LIKE ?")
+        params.append(f"%{w}%")
+    w_sql = (" AND " + " AND ".join(where)) if where else ""
+    return await _all(
+        f"""SELECT s.* FROM series s WHERE EXISTS
+            (SELECT 1 FROM movies e WHERE e.series_id=s.id AND e.status='live'){w_sql}
+            ORDER BY s.id DESC LIMIT ?""",
+        [*params, limit],
+    )
+
+
+_ITEMS = """
+SELECT 'm' AS t, m.id AS id, m.id AS fk, m.title AS title, m.year AS year, m.genre AS genre, m.genre_lc AS genre_lc,
+       m.country AS country, m.quality AS quality, m.views AS views, m.poster_id AS poster_id, m.kind AS kind,
+       m.search_text AS search_text, m.created_at AS created_at, 0 AS eps
+FROM movies m WHERE m.status='live' AND m.series_id IS NULL
+UNION ALL
+SELECT 's', s.id, -s.id, s.title, s.year, s.genre, s.genre_lc, s.country, '', v.views, s.poster_id, s.kind,
+       s.search_text, v.last, v.n
+FROM series s JOIN (
+  SELECT series_id, SUM(views) AS views, MAX(created_at) AS last, COUNT(*) AS n
+  FROM movies WHERE status='live' AND series_id IS NOT NULL GROUP BY series_id
+) v ON v.series_id = s.id
+"""
+
+_ITEM_ORDER = {
+    "new": "i.created_at DESC, i.t, i.id DESC",
+    "top": "i.views DESC, i.id DESC",
+    "year": "CAST(i.year AS INTEGER) DESC, i.id DESC",
+}
+
+
+async def search_items(q: str = "", genre: str = "", sort: str = "new", limit: int = 20, offset: int = 0,
+                       fav_user: int | None = None, kind: str = ""):
+    """Katalog uchun: kinolar + seriallar aralash. (qatorlar, jami) qaytaradi."""
+    frm = "FROM items i"
+    params: list = []
+    if fav_user is not None:
+        frm += " JOIN favorites f ON f.movie_id=i.fk AND f.user_id=?"
+        params.append(fav_user)
+    where = []
+    code = parse_series_code(q)
+    if code:
+        where.append("i.t='s' AND i.kind=? AND i.id=?")
+        params += [code[0], code[1]]
+    else:
+        for w in norm(q).split():
+            where.append("i.search_text LIKE ?")
+            params.append(f"%{w}%")
+    if kind in KINDS:
+        where.append("i.kind=?")
+        params.append(kind)
+    if genre:
+        where.append("(',' || i.genre_lc || ',') LIKE ?")
+        params.append(f"%,{norm(genre)},%")
+    w_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    cte = f"WITH items AS ({_ITEMS}) "
+    total = (await _one(f"{cte}SELECT COUNT(*) AS c {frm}{w_sql}", params))["c"]
+    order = _ITEM_ORDER.get(sort, _ITEM_ORDER["new"])
+    rows = await _all(f"{cte}SELECT i.* {frm}{w_sql} ORDER BY {order} LIMIT ? OFFSET ?", [*params, limit, offset])
+    return rows, total
+
+
+async def pending_groups():
+    """Kutilayotganlarni guruhlaydi: [{key,label_kind,series,rows}] — avval yakka kinolar, keyin seriallar."""
+    rows = await pending_movies()
+    singles: dict[str, list] = {}
+    eps: dict[int, list] = {}
+    for r in rows:
+        if r["series_id"] is None:
+            singles.setdefault(r["kind"], []).append(r)
+        else:
+            eps.setdefault(r["series_id"], []).append(r)
+    groups = []
+    for kind in KINDS:
+        if singles.get(kind):
+            groups.append({"key": f"single:{kind}", "kind": kind, "series": None, "rows": singles[kind]})
+    for sid, lst in eps.items():
+        ser = await get_series(sid)
+        if ser:
+            groups.append({"key": f"s:{sid}", "kind": ser["kind"], "series": ser,
+                           "rows": sorted(lst, key=lambda r: r["ep"] or 0)})
+    return groups
 
 
 async def movie_by_source(chat_id: int, msg_id: int):
@@ -310,7 +529,7 @@ async def search_movies(q: str = "", genre: str = "", sort: str = "new",
     if fav_user is not None:
         frm += " JOIN favorites f ON f.movie_id=m.id AND f.user_id=?"
         params.append(fav_user)
-    where = ["m.status = ?"]
+    where = ["m.status = ?", "m.series_id IS NULL"]
     params.append(status)
     for w in norm(q).split():
         where.append("m.search_text LIKE ?")
@@ -326,19 +545,23 @@ async def search_movies(q: str = "", genre: str = "", sort: str = "new",
 
 
 async def top_movies(limit: int = 10):
-    return await _all("SELECT * FROM movies WHERE status='live' ORDER BY views DESC, id DESC LIMIT ?", (limit,))
+    return await _all("SELECT * FROM movies WHERE status='live' AND series_id IS NULL ORDER BY views DESC, id DESC LIMIT ?", (limit,))
 
 
 async def new_movies(limit: int = 10):
-    return await _all("SELECT * FROM movies WHERE status='live' ORDER BY id DESC LIMIT ?", (limit,))
+    return await _all("SELECT * FROM movies WHERE status='live' AND series_id IS NULL ORDER BY id DESC LIMIT ?", (limit,))
 
 
 async def random_movie():
-    return await _one("SELECT * FROM movies WHERE status='live' ORDER BY RANDOM() LIMIT 1")
+    return await _one("SELECT * FROM movies WHERE status='live' AND series_id IS NULL ORDER BY RANDOM() LIMIT 1")
 
 
 async def genres(limit: int = 24) -> list[str]:
-    rows = await _all("SELECT genre FROM movies WHERE genre != '' AND status='live'")
+    rows = await _all(
+        "SELECT genre FROM movies WHERE genre != '' AND status='live' AND series_id IS NULL "
+        "UNION ALL SELECT genre FROM series WHERE genre != '' AND id IN "
+        "(SELECT series_id FROM movies WHERE status='live' AND series_id IS NOT NULL)"
+    )
     count: dict[str, int] = {}
     shown: dict[str, str] = {}
     for r in rows:
@@ -380,7 +603,7 @@ async def fav_ids(uid: int) -> list[int]:
 
 async def fav_movies(uid: int, limit: int = 30):
     return await _all(
-        "SELECT m.* FROM movies m JOIN favorites f ON f.movie_id=m.id WHERE f.user_id=? AND m.status='live' ORDER BY m.id DESC LIMIT ?",
+        "SELECT m.* FROM movies m JOIN favorites f ON f.movie_id=m.id WHERE f.user_id=? AND m.status='live' AND m.series_id IS NULL ORDER BY m.id DESC LIMIT ?",
         (uid, limit),
     )
 
@@ -403,12 +626,19 @@ async def del_channel(cid: int) -> None:
 
 
 # ───────────── Avto-yuklash kanallari (manba) ─────────────
-async def add_source(chat_id: int, title: str) -> None:
+async def add_source(chat_id: int, title: str, kind: str = "kino", series_id: int | None = None) -> None:
+    """Qayta ulansa tur/serial o'zgarmaydi, faqat nomi yangilanadi (berilgan bo'lsa — yangilanadi)."""
     await _run(
-        """INSERT INTO sources(chat_id, title) VALUES(?,?)
-           ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title""",
-        (chat_id, title),
+        """INSERT INTO sources(chat_id, title, kind, series_id) VALUES(?,?,?,?)
+           ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title,
+             kind=CASE WHEN excluded.series_id IS NOT NULL OR excluded.kind != 'kino' THEN excluded.kind ELSE sources.kind END,
+             series_id=COALESCE(excluded.series_id, sources.series_id)""",
+        (chat_id, title, kind, series_id),
     )
+
+
+async def get_source(chat_id: int):
+    return await _one("SELECT * FROM sources WHERE chat_id=?", (chat_id,))
 
 
 async def list_sources():
@@ -471,8 +701,10 @@ async def stats() -> dict:
         "active_day": (await one("SELECT COUNT(*) c FROM users WHERE last_active>=?", (day,)))["c"],
         "banned": (await one("SELECT COUNT(*) c FROM users WHERE banned=1"))["c"],
         "blocked": (await one("SELECT COUNT(*) c FROM users WHERE blocked=1"))["c"],
-        "movies": (await one("SELECT COUNT(*) c FROM movies WHERE status='live'"))["c"],
+        "movies": (await one("SELECT COUNT(*) c FROM movies WHERE status='live' AND series_id IS NULL"))["c"],
         "pending": (await one("SELECT COUNT(*) c FROM movies WHERE status='pending'"))["c"],
+        "series": (await one(
+            "SELECT COUNT(DISTINCT series_id) c FROM movies WHERE status='live' AND series_id IS NOT NULL"))["c"],
         "views": (await one("SELECT COUNT(*) c FROM views"))["c"],
         "views_day": (await one("SELECT COUNT(*) c FROM views WHERE at>=?", (day,)))["c"],
         "channels": (await one("SELECT COUNT(*) c FROM channels"))["c"],

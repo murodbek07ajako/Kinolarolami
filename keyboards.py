@@ -11,10 +11,14 @@ def _kb(rows: list[list[B]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def webapp_button(text: str = "🎬 Katalog (Mini App)") -> B | None:
+def webapp_button(text: str = "🎬 Katalog (Mini App)", query: str = "") -> B | None:
+    """Katalogni ochuvchi tugma. query berilsa katalog qidiruvi shu matn bilan ochiladi (masalan s.1)."""
     if not config.WEBAPP_URL:
         return None
-    return B(text=text, web_app=WebAppInfo(url=config.WEBAPP_URL))
+    url = config.WEBAPP_URL
+    if query:
+        url += ("&" if "?" in url else "?") + "q=" + quote(query)
+    return B(text=text, web_app=WebAppInfo(url=url))
 
 
 # ───────────── Foydalanuvchi ─────────────
@@ -46,18 +50,23 @@ def movies_kb(movies, menu: bool = True) -> InlineKeyboardMarkup:
     return _kb(rows)
 
 
-def movie_kb(movie_id: int, is_fav: bool, bot_username: str, title: str) -> InlineKeyboardMarkup:
+def movie_kb(movie_id: int, is_fav: bool, bot_username: str, title: str, episode: bool = False) -> InlineKeyboardMarkup:
     link = f"https://t.me/{bot_username}?start=m_{movie_id}"
     share = f"https://t.me/share/url?url={quote(link)}&text={quote('🎬 ' + title)}"
-    rows = [
+    rows = [] if episode else [
         [B(text="💔 Saralanganlardan olib tashlash" if is_fav else "⭐ Saralanganlarga qo'shish",
            callback_data=f"fav:{movie_id}")],
-        [B(text="📤 Do'stlarga ulashish", url=share)],
     ]
+    rows.append([B(text="📤 Do'stlarga ulashish", url=share)])
     w = webapp_button("🎞 Katalogni ochish")
     if w:
         rows.append([w])
     return _kb(rows)
+
+
+def catalog_query_kb(query: str) -> InlineKeyboardMarkup | None:
+    w = webapp_button("🎞 Katalogda ochish", query=query)
+    return _kb([[w]]) if w else None
 
 
 def open_catalog_kb() -> InlineKeyboardMarkup | None:

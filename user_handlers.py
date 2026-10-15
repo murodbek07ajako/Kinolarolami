@@ -252,6 +252,28 @@ async def cb_fav(c: CallbackQuery, bot: Bot):
 @router.message(StateFilter(default_state), F.text & ~F.text.startswith("/"))
 async def on_text(m: Message, bot: Bot):
     q = m.text.strip()
+    code = db.parse_series_code(q)
+    if code:
+        if not await gate(bot, m):
+            return
+        ser = await db.get_series(code[1])
+        eps = await db.episodes(ser["id"]) if ser and ser["kind"] == code[0] else []
+        if not eps:
+            await m.answer(
+                f"❌ <code>{html.escape(q)}</code> kodli kontent topilmadi.\n\n"
+                "Kodni tekshirib qayta yuboring yoki katalogdan qidiring.",
+                reply_markup=kb.open_catalog_kb(),
+            )
+            return
+        c = db.series_code(ser["kind"], ser["id"])
+        await m.answer(
+            f"{svc.KIND_EMOJI.get(ser['kind'], '📺')} <b>{html.escape(ser['title'])}</b> — "
+            f"<b>{len(eps)}</b> ta qism bor.\n\n"
+            f"Qismlarni ko'rish uchun <b>katalogni</b> oching: u yerda qidiruvga "
+            f"<code>{c}</code> deb yozing va kerakli qismni tanlang. 👇",
+            reply_markup=kb.catalog_query_kb(c),
+        )
+        return
     if q.isdigit():
         if not await gate(bot, m, int(q)):
             return
@@ -272,6 +294,20 @@ async def on_text(m: Message, bot: Bot):
         await m.answer("🔎 Qidirish uchun kamida 2 ta belgi yozing.")
         return
     rows, total = await db.search_movies(q, limit=10)
+    series = await db.search_series(q, limit=5)
+    if series:
+        lines = "\n".join(
+            f"{svc.KIND_EMOJI.get(x['kind'], '📺')} <b>{html.escape(x['title'])}</b> — kod: <code>"
+            f"{db.series_code(x['kind'], x['id'])}</code>" for x in series)
+        if not rows:
+            await m.answer(
+                f"🔎 <b>«{html.escape(q[:60])}»</b> bo'yicha qismli kontent topildi:\n\n{lines}\n\n"
+                "Qismlarini katalogdan ko'ring (qidiruvga kodni yozing) 👇",
+                reply_markup=kb.catalog_query_kb(db.series_code(series[0]["kind"], series[0]["id"])),
+            )
+            return
+        await m.answer(f"📺 Qismli kontent:\n\n{lines}\n\nQismlarini katalogdan ko'ring.",
+                       reply_markup=kb.catalog_query_kb(db.series_code(series[0]["kind"], series[0]["id"])))
     if not rows:
         await m.answer(
             f"😔 <b>«{html.escape(q[:60])}»</b> bo'yicha hech narsa topilmadi.\n\n"

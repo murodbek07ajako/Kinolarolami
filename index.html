@@ -126,6 +126,34 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 .addrow .inp{flex:1;min-width:0}
 .addrow button{flex:none;padding:0 14px;border-radius:12px;background:var(--grad);color:#fff;font-weight:700;font-size:14px}
 .more{display:block;width:100%;margin-top:12px;padding:11px;border-radius:12px;border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:13.5px}
+.kinds{margin-top:10px}
+.kinds button{padding:6px 12px;font-size:12.5px}
+.epgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:8px;padding:6px 16px 0}
+.epb{height:46px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:15px}
+.epb:active{transform:scale(.94)}
+.epb.pend{opacity:.55;border-style:dashed}
+.epb:disabled{opacity:.5}
+.sec{padding:14px 16px 0;font-weight:700;font-size:14px}
+.badge.e{left:8px;color:#8ee3ff}
+.bigbtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-top:12px;padding:16px;border-radius:18px;background:var(--card);border:1px solid var(--line)}
+.bigbtn:active{transform:scale(.98)}
+.bigbtn .bi{font-size:28px;flex:none}
+.bigbtn b{display:block;font-size:16px}
+.bigbtn span{color:var(--muted);font-size:12.5px}
+.bigbtn .cnt{margin-left:auto;flex:none;min-width:34px;text-align:center;padding:4px 10px;border-radius:99px;background:var(--grad);color:#fff;font-weight:800;font-size:14px}
+.grp{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px}
+.grp .gh{display:flex;align-items:center;gap:10px;cursor:pointer}
+.grp .gh b{font-size:15px}
+.grp .gh .cnt{margin-left:auto;padding:3px 10px;border-radius:99px;background:var(--grad);color:#fff;font-weight:800;font-size:13px}
+.grp .items{margin-top:6px}
+.grp .pub{display:flex;gap:8px;margin-top:10px}
+.grp .pub button{flex:1;padding:10px 8px;border-radius:12px;font-weight:700;font-size:13px;background:var(--grad);color:#fff}
+.grp .pub button.q{background:var(--bg2);border:1px solid var(--line);color:var(--text)}
+[hidden]{display:none!important}
+.swrow{display:flex;align-items:center;gap:12px;margin-top:14px}
+.swrow .grow{flex:1}
+.back2{margin-bottom:4px}
+.sel{appearance:none;-webkit-appearance:none}
 .done{text-align:center;padding:30px 8px 10px}
 .done .e{font-size:58px;margin-bottom:6px}
 .done h2{margin:0 0 8px;font-size:20px}
@@ -149,6 +177,13 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     <button data-sort="year">📅 Yil bo'yicha</button>
     <button data-sort="fav">⭐ Saralangan</button>
   </div>
+  <div class="tabs kinds" id="kinds">
+    <button data-kind="" class="on">Hammasi</button>
+    <button data-kind="kino">🎬 Kino</button>
+    <button data-kind="multfilm">🧸 Multfilm</button>
+    <button data-kind="serial">📺 Serial</button>
+    <button data-kind="anime">🎌 Anime</button>
+  </div>
   <div class="chips" id="chips"></div>
 </header>
 
@@ -169,6 +204,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       <button data-tab="stats" class="on">📊 Stat</button>
       <button data-tab="add">🎬 Qo'shish</button>
       <button data-tab="movies">📋 Kinolar</button>
+      <button data-tab="auto">📥 Avto</button>
       <button data-tab="settings">⚙️ Sozlama</button>
     </div>
   </div>
@@ -185,7 +221,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   const $ = s => document.querySelector(s);
   const initData = (tg && tg.initData) || '';
   const PAGE = 20;
-  const S = { q: '', genre: '', sort: 'new', offset: 0, loading: false, done: false, gen: 0, favs: new Set(), favChanged: false, genres: [] };
+  const S = { q: '', genre: '', kind: '', sort: 'new', autoOpen: false, offset: 0, loading: false, done: false, gen: 0, favs: new Set(), favChanged: false, genres: [] };
 
   const haptic = (t = 'light') => { try { tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -215,14 +251,15 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   function posterBox(m) {
     const box = el('div', 'poster');
     const ph = el('div', 'ph', (m.title || '?').trim().charAt(0).toUpperCase());
-    ph.style.background = `linear-gradient(135deg,hsl(${hue(m.id)} 55% 32%),hsl(${(hue(m.id) + 55) % 360} 60% 20%))`;
+    const hh = hue(m.id + (m.t === 's' ? 7 : 0));
+    ph.style.background = `linear-gradient(135deg,hsl(${hh} 55% 32%),hsl(${(hh + 55) % 360} 60% 20%))`;
     box.appendChild(ph);
     if (m.poster) {
       const img = new Image();
       img.alt = ''; img.decoding = 'async';
       img.onload = () => img.classList.add('ok');
       img.onerror = () => img.remove();
-      img.src = '/api/poster/' + m.id;
+      img.src = (m.t === 's' ? '/api/sposter/' : '/api/poster/') + m.id;
       box.appendChild(img);
     }
     return box;
@@ -234,7 +271,8 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     c.style.animationDelay = (i % PAGE) * 22 + 'ms';
     const p = posterBox(m);
     p.appendChild(el('div', 'shade'));
-    if (m.quality) p.appendChild(el('span', 'badge q', m.quality));
+    if (m.t === 's') p.appendChild(el('span', 'badge e', m.eps + ' qism'));
+    else if (m.quality) p.appendChild(el('span', 'badge q', m.quality));
     if (m.year) p.appendChild(el('span', 'badge y', m.year));
     p.appendChild(el('span', 'views', '👁 ' + fmt(m.views)));
     c.appendChild(p);
@@ -242,7 +280,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     meta.appendChild(el('div', 't', m.title));
     meta.appendChild(el('div', 'g', m.genre || m.country || ''));
     c.appendChild(meta);
-    c.onclick = () => { haptic(); openSheet(m.id); };
+    c.onclick = () => { haptic(); openSheet(m); };
     return c;
   }
 
@@ -273,7 +311,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     if (S.loading || S.done) return;
     const gen = S.gen; S.loading = true;
     try {
-      const qs = new URLSearchParams({ q: S.q, genre: S.genre, sort: S.sort, offset: S.offset, limit: PAGE });
+      const qs = new URLSearchParams({ q: S.q, genre: S.genre, kind: S.kind, sort: S.sort, offset: S.offset, limit: PAGE });
       const d = await api('/api/movies?' + qs);
       if (gen !== S.gen) return;
       clearSkeleton();
@@ -281,8 +319,9 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       d.items.forEach((m, i) => grid.appendChild(card(m, S.offset + i)));
       S.offset += d.items.length;
       S.done = S.offset >= d.total || d.items.length === 0;
-      $('#count').textContent = d.total ? d.total + ' ta kino' : '';
+      $('#count').textContent = d.total ? d.total + ' ta natija' : '';
       if (d.total === 0) showEmpty();
+      if (S.autoOpen) { S.autoOpen = false; if (d.total === 1 && d.items[0].t === 's') openSheet(d.items[0]); }
     } catch (e) {
       if (gen !== S.gen) return;
       clearSkeleton();
@@ -319,6 +358,13 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     S.sort = b.dataset.sort; load(true);
   });
 
+  $('#kinds').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    haptic();
+    document.querySelectorAll('#kinds button').forEach(x => x.classList.toggle('on', x === b));
+    S.kind = b.dataset.kind; load(true);
+  });
+
   const qi = $('#q'), clr = $('#clr');
   let deb;
   qi.addEventListener('input', () => {
@@ -343,65 +389,86 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   }
   ov.onclick = closeSheet;
 
-  async function openSheet(id) {
+  async function openSheet(m) {
     sheetOpen = true;
     sheet.replaceChildren(el('div', 'grab'), el('div', 'loader', '⏳ Yuklanmoqda...'));
     sheet.scrollTop = 0;
     sheet.classList.add('on'); ov.classList.add('on');
     try { tg.BackButton.onClick(closeSheet); tg.BackButton.show(); } catch (e) {}
     try {
-      renderSheet(await api('/api/movie/' + id));
+      renderSheet(await api((m.t === 's' ? '/api/series/' : '/api/movie/') + m.id));
     } catch (e) {
-      closeSheet(); toast('Kino topilmadi');
+      closeSheet(); toast('Topilmadi');
     }
   }
 
+  async function sendToBot(id, btn, label) {
+    haptic('medium');
+    btn.disabled = true; btn.textContent = '⏳';
+    const reset = () => { btn.disabled = false; btn.textContent = label; };
+    try {
+      const r = await api('/api/send', { id });
+      if (r.status === 'ok') {
+        toast('✅ Botga yuborildi!');
+        setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 900);
+      } else if (r.status === 'sub') {
+        toast('📢 Avval kanallarga obuna bo\'ling. Botga xabar yuborildi.', 3200);
+        setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 2000);
+      } else { toast('⚠️ Yuborib bo\'lmadi'); reset(); }
+    } catch (e) { toast('Xatolik, qayta urinib ko\'ring'); reset(); }
+  }
+
+  const KIND_LABEL = { kino: '🎬 Kino', multfilm: '🧸 Multfilm', serial: '📺 Serial', anime: '🎌 Anime' };
+
   function renderSheet(m) {
+    const isS = m.t === 's';
     sheet.replaceChildren(el('div', 'grab'));
     const hero = el('div', 'hero');
     hero.appendChild(posterBox(m));
     const info = el('div', 'info');
     info.appendChild(el('h2', null, m.title));
+    if (isS || m.kind !== 'kino') info.appendChild(el('span', 'tag', KIND_LABEL[m.kind] || m.kind));
     [m.year, m.quality, m.language].filter(Boolean).forEach(t => info.appendChild(el('span', 'tag', t)));
     (m.genre || '').split(',').map(x => x.trim()).filter(Boolean).forEach(g => info.appendChild(el('span', 'tag', '🎭 ' + g)));
     hero.appendChild(info); sheet.appendChild(hero);
 
     const rows = el('div', 'rows');
     const add = (k, v) => { if (!v) return; const d = el('div'); d.appendChild(document.createTextNode(k + ' ')); d.appendChild(el('b', null, v)); rows.appendChild(d); };
-    add('🌍 Davlat:', m.country); add('👁 Ko\'rishlar:', String(m.views)); add('🔢 Kod:', String(m.id));
+    add('🌍 Davlat:', m.country); add('👁 Ko\'rishlar:', String(m.views)); add('🔢 Kod:', String(m.code || m.id));
+    if (isS) add('🎞 Qismlar:', String(m.eps.length));
     sheet.appendChild(rows);
     if (m.description) sheet.appendChild(el('div', 'desc', m.description));
 
+    const fk = m.fk != null ? m.fk : m.id;
     const acts = el('div', 'acts');
-    const watch = el('button', 'btn main', '▶ Botda ko\'rish');
-    const fav = el('button', 'btn fav', S.favs.has(m.id) ? '❤️' : '🤍');
-    acts.append(watch, fav); sheet.appendChild(acts);
+    const fav = el('button', 'btn fav', S.favs.has(fk) ? '❤️' : '🤍');
+    if (isS) {
+      sheet.appendChild(el('div', 'sec', 'Qismni tanlang 👇'));
+      const g = el('div', 'epgrid');
+      m.eps.forEach(e => {
+        const b = el('button', 'epb' + (e.live ? '' : ' pend'), String(e.ep));
+        b.title = e.ep + '-qism';
+        b.onclick = () => sendToBot(e.id, b, String(e.ep));
+        g.appendChild(b);
+      });
+      sheet.appendChild(g);
+      fav.style.width = '100%'; acts.appendChild(fav);
+    } else {
+      const watch = el('button', 'btn main', '▶ Botda ko\'rish');
+      watch.onclick = () => sendToBot(m.id, watch, '▶ Botda ko\'rish');
+      acts.append(watch, fav);
+    }
+    sheet.appendChild(acts);
 
     fav.onclick = async () => {
       haptic();
       try {
-        const r = await api('/api/fav', { id: m.id });
-        if (r.fav) S.favs.add(m.id); else S.favs.delete(m.id);
+        const r = await api('/api/fav', { id: fk });
+        if (r.fav) S.favs.add(fk); else S.favs.delete(fk);
         fav.textContent = r.fav ? '❤️' : '🤍';
         S.favChanged = true;
         toast(r.fav ? '⭐ Saralanganlarga qo\'shildi' : 'Saralanganlardan olib tashlandi', 1600);
       } catch (e) { toast('Xatolik, qayta urinib ko\'ring'); }
-    };
-
-    watch.onclick = async () => {
-      haptic('medium');
-      watch.disabled = true; watch.textContent = '⏳ Yuborilmoqda...';
-      const reset = () => { watch.disabled = false; watch.textContent = '▶ Botda ko\'rish'; };
-      try {
-        const r = await api('/api/send', { id: m.id });
-        if (r.status === 'ok') {
-          toast('✅ Kino botga yuborildi!');
-          setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 900);
-        } else if (r.status === 'sub') {
-          toast('📢 Avval kanallarga obuna bo\'ling. Botga xabar yuborildi.', 3200);
-          setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 2000);
-        } else { toast('⚠️ Kinoni yuborib bo\'lmadi'); reset(); }
-      } catch (e) { toast('Xatolik, qayta urinib ko\'ring'); reset(); }
     };
   }
 
@@ -467,8 +534,9 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     [
       ['👥 Foydalanuvchilar', s.users], ['🆕 Bugun qo\'shilgan', s.new_day],
       ['🟢 24 soatda faol', s.active_day], ['📅 7 kunda qo\'shilgan', s.new_week],
-      ['🎬 Kinolar', s.movies], ['👁 Jami ko\'rishlar', s.views],
-      ['📈 Bugungi ko\'rishlar', s.views_day], ['⏳ Kutilmoqda', s.pending],
+      ['🎬 Kinolar', s.movies], ['📺 Qismli kontent', s.series || 0],
+      ['👁 Jami ko\'rishlar', s.views], ['📈 Bugungi ko\'rishlar', s.views_day],
+      ['⏳ Kutilmoqda', s.pending], ['📢 Kanallar', s.channels],
     ].forEach(([label, val]) => {
       const c = el('div', 'stat'); c.appendChild(el('b', null, String(val))); c.appendChild(el('span', null, label)); grid.appendChild(c);
     });
@@ -499,11 +567,14 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     p.appendChild(document.createTextNode(' yuboring — bot uni avtomatik qo\'shadi. Xohlasangiz avval poster rasmini yuboring.'));
     d.appendChild(p);
     d.appendChild(mkBtn('btn main', '📤 Botga o\'tish', () => { try { tg.close(); } catch (e) { toast('Botga qaytib, kinoni yuboring'); } }));
-    d.appendChild(mkBtn('btn2', '➕ Yana bitta kino', () => showTab('add')));
+    d.appendChild(mkBtn('btn2', '➕ Yana bitta', () => showTab('add')));
     return d;
   }
 
-  function movieForm(panel, init) {
+  const KINDS = [['kino', '🎬 Kino'], ['multfilm', '🧸 Multfilm'], ['anime', '🎌 Anime'], ['serial', '📺 Serial']];
+
+  /* Maydonlar bloki: nom, yil, (sifat), janr, davlat, til, tavsif. opts.noQuality — qismli kontent uchun */
+  function movieForm(panel, init, opts = {}) {
     const F = {};
     const field = (key, label, required, input) => {
       const l = el('label', 'lbl', label + (required ? ' ' : ''));
@@ -528,34 +599,69 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       return box;
     };
 
-    field('title', 'Kino nomi', true, inp('Masalan: Qasoskor', { maxLength: 120 }));
-    const row = el('div', 'two'); panel.appendChild(row);
-    // yil va sifat yonma-yon
-    const yl = el('div'); yl.appendChild(el('label', 'lbl', 'Yili')); F.year = inp('2024', { inputMode: 'numeric', maxLength: 4 }); yl.appendChild(F.year);
-    const ql = el('div'); ql.appendChild(el('label', 'lbl', 'Sifati')); F.quality = inp('1080p', { maxLength: 20 }); ql.appendChild(F.quality);
-    row.append(yl, ql);
-    panel.appendChild(chips(F.quality, ['480p', '720p', '1080p', '4K'], false));
+    field('title', opts.titleLabel || 'Kino nomi', true, inp('Masalan: Qasoskor', { maxLength: 120 }));
+    if (opts.noQuality) {
+      field('year', 'Yili', false, inp('2024', { inputMode: 'numeric', maxLength: 4 }));
+    } else {
+      const row = el('div', 'two'); panel.appendChild(row);
+      const yl = el('div'); yl.appendChild(el('label', 'lbl', 'Yili')); F.year = inp('2024', { inputMode: 'numeric', maxLength: 4 }); yl.appendChild(F.year);
+      const ql = el('div'); ql.appendChild(el('label', 'lbl', 'Sifati')); F.quality = inp('1080p', { maxLength: 20 }); ql.appendChild(F.quality);
+      row.append(yl, ql);
+      panel.appendChild(chips(F.quality, ['480p', '720p', '1080p', '4K'], false));
+    }
     field('genre', 'Janri (vergul bilan)', false, inp('Jangari, Drama', { maxLength: 100 }));
     if (S.genres.length) panel.appendChild(chips(F.genre, S.genres.slice(0, 14), true));
     field('country', 'Davlati', false, inp('AQSH', { maxLength: 60 }));
     field('language', 'Tili', false, inp('O\'zbek tilida', { maxLength: 60 }));
     panel.appendChild(chips(F.language, ['O\'zbek tilida', 'Rus tilida', 'Ingliz tilida'], false));
-    const ta = el('textarea', 'inp'); ta.placeholder = 'Kino haqida qisqacha...'; ta.maxLength = 800;
+    const ta = el('textarea', 'inp'); ta.placeholder = 'Qisqacha mazmuni...'; ta.maxLength = 800;
     field('description', 'Tavsif', false, ta);
-
     Object.keys(F).forEach(k => { if (init && init[k]) F[k].value = init[k]; });
     Object.values(F).forEach(i => i.dispatchEvent(new Event('input')));
     return F;
   }
 
+  function validMeta(F) {
+    if (!F.title.value.trim()) { toast('Nomini kiriting'); F.title.focus(); return false; }
+    const y = F.year.value.trim();
+    if (y && !/^(18|19|20)\d{2}$/.test(y)) { toast('Yil noto\'g\'ri (masalan: 2024)'); F.year.focus(); return false; }
+    return true;
+  }
+  const readForm = F => { const b = {}; Object.keys(F).forEach(k => b[k] = F[k].value.trim()); return b; };
+
+  /* Tur tanlash: chiplar + «Qismli» tugmasi (serial doim qismli) */
+  function kindPicker(state, onChange) {
+    const box = el('div');
+    const chipsBox = el('div', 'qchips');
+    const swWrap = el('div', 'swrow');
+    const g = el('div', 'grow'); g.appendChild(el('div', 'nm', '🎞 Qismli'));
+    const d = el('div', 'sm', 'Har qismi alohida video (serial kabi)'); d.style.whiteSpace = 'normal'; g.appendChild(d);
+    const sw = el('button', 'sw'); sw.setAttribute('aria-label', 'Qismli');
+    swWrap.append(g, sw);
+    const sync = () => {
+      chipsBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === state.kind));
+      if (state.kind === 'serial') state.parts = true;
+      if (state.kind === 'kino') state.parts = false;
+      sw.classList.toggle('on', state.parts);
+      swWrap.hidden = state.kind === 'kino' || state.kind === 'serial';
+    };
+    KINDS.forEach(([k, label]) => {
+      const b = mkBtn('', label, () => { haptic(); state.kind = k; sync(); onChange(); }); b.dataset.k = k; chipsBox.appendChild(b);
+    });
+    sw.onclick = () => { haptic(); state.parts = !state.parts; sync(); onChange(); };
+    box.append(chipsBox, swWrap); sync();
+    return box;
+  }
+
   TABS.add = async () => {
     const wrap = el('div');
-    let draft = null;
+    let draft = null, series = [];
     try { draft = (await api('/api/admin/draft')).draft; } catch (e) {}
+    try { series = (await api('/api/admin/series')).items; } catch (e) {}
     if (draft) {
       const n = el('div', 'notice');
       n.appendChild(document.createTextNode('⏳ Video kutilmoqda: '));
-      n.appendChild(el('b', null, draft.title));
+      n.appendChild(el('b', null, draft.title + (draft.ep ? ' — ' + draft.ep + '-qism' : '')));
       n.appendChild(document.createTextNode('. Botga o\'ting va kinoni (video/fayl) yuboring.'));
       n.appendChild(el('div'));
       n.appendChild(mkBtn('btn2', '❌ Bekor qilish', async () => {
@@ -566,22 +672,60 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     }
 
     const panel = el('div', 'panel');
-    panel.appendChild(el('h3', null, '🎬 Yangi kino ma\'lumotlari'));
-    panel.appendChild(el('div', 'note', 'Hammasini to\'ldirib saqlang. Keyin bot kinoning o\'zini (video) so\'raydi — Telegram cheklovi tufayli faylni shu yerning o\'zidan yuklab bo\'lmaydi.'));
-    const F = movieForm(panel);
+    panel.appendChild(el('h3', null, '🎬 Yangi qo\'shish'));
+    panel.appendChild(el('div', 'note', 'Turini tanlang, ma\'lumotlarni to\'ldirib saqlang. Keyin bot videoning o\'zini so\'raydi — Telegram cheklovi tufayli faylni shu yerdan yuklab bo\'lmaydi.'));
+    const state = { kind: 'kino', parts: false, seriesId: 0 };
+    const body = el('div');
+    let F = {}, epInput = null, pick = null;
+    const render = () => {
+      body.replaceChildren(); F = {}; epInput = null; pick = null;
+      if (!state.parts) { F = movieForm(body); return; }
+      const mine = series.filter(x => x.kind === state.kind);
+      if (!mine.some(x => x.id === state.seriesId)) state.seriesId = 0;
+      body.appendChild(el('label', 'lbl', 'Qaysi serial/to\'plam?'));
+      pick = el('select', 'inp sel');
+      const o0 = el('option', null, '➕ Yangi yaratish'); o0.value = '0'; pick.appendChild(o0);
+      mine.forEach(x => { const o = el('option', null, x.code + ' — ' + x.title + ' (' + x.eps + ' qism)'); o.value = String(x.id); pick.appendChild(o); });
+      pick.value = String(state.seriesId);
+      body.appendChild(pick);
+      const epWrap = el('div');
+      epWrap.appendChild(el('label', 'lbl', 'Qism raqami *'));
+      epInput = el('input', 'inp'); epInput.inputMode = 'numeric'; epInput.maxLength = 4; epInput.placeholder = '1';
+      epWrap.appendChild(epInput); body.appendChild(epWrap);
+      const metaBox = el('div'); body.appendChild(metaBox);
+      const draw = () => {
+        metaBox.replaceChildren(); F = {};
+        const cur = mine.find(x => x.id === state.seriesId);
+        epInput.value = String(cur ? cur.last_ep + 1 : 1);
+        if (!cur) F = movieForm(metaBox, null, { noQuality: true, titleLabel: 'Serial / to\'plam nomi' });
+      };
+      pick.onchange = () => { state.seriesId = +pick.value; draw(); };
+      draw();
+    };
+    panel.append(kindPicker(state, render), body);
+    render();
 
     const save = mkBtn('btn main full', '💾 Saqlash va davom etish', async () => {
-      const body = {}; Object.keys(F).forEach(k => body[k] = F[k].value.trim());
-      if (!body.title) { toast('Kino nomini kiriting'); F.title.focus(); return; }
-      if (body.year && !/^(18|19|20)\d{2}$/.test(body.year)) { toast('Yil noto\'g\'ri (masalan: 2024)'); F.year.focus(); return; }
+      const data = { kind: state.kind, parts: state.parts };
+      if (state.parts) {
+        const ep = parseInt(epInput.value, 10);
+        if (!(ep >= 1)) { toast('Qism raqamini kiriting'); epInput.focus(); return; }
+        data.ep = ep;
+        if (state.seriesId) data.series_id = state.seriesId;
+        else { if (!validMeta(F)) return; Object.assign(data, readForm(F)); }
+      } else {
+        if (!validMeta(F)) return;
+        Object.assign(data, readForm(F));
+      }
       save.disabled = true; save.textContent = '⏳ Saqlanmoqda...';
       try {
-        await api('/api/admin/draft', body);
+        await api('/api/admin/draft', data);
         haptic('medium');
-        admOpen && admBody.replaceChildren(doneView(body.title));
+        const nm = state.parts && state.seriesId ? (series.find(x => x.id === state.seriesId) || {}).title : data.title;
+        admOpen && admBody.replaceChildren(doneView(nm + (data.ep ? ' — ' + data.ep + '-qism' : '')));
         adm.scrollTop = 0;
       } catch (e) {
-        toast(errMsg(e)); save.disabled = false; save.textContent = '💾 Saqlash va davom etish';
+        toast(errMsg(e), 3200); save.disabled = false; save.textContent = '💾 Saqlash va davom etish';
       }
     });
     panel.appendChild(save);
@@ -590,50 +734,12 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   };
 
   /* ───── 3) Kinolar ro'yxati ───── */
-  function pendingPanel(items) {
-    const p = el('div', 'panel');
-    p.appendChild(el('h3', null, '⏳ Kutilayotganlar (' + items.length + ')'));
-    p.appendChild(el('div', 'note', 'Kanaldan kelgan kinolar. Foydalanuvchilar hali ko\'rmaydi — tayyor bo\'lgach chiqaring.'));
-    items.forEach(m => {
-      const r = el('div', 'row');
-      const g = el('div', 'grow');
-      g.appendChild(el('div', 'nm', m.title + (m.year ? ' (' + m.year + ')' : '')));
-      g.appendChild(el('div', 'sm', 'kod: ' + m.id + (m.genre ? ' • ' + m.genre : '')));
-      r.appendChild(g);
-      r.appendChild(mkBtn('ico', '🗑', async () => {
-        if (!await confirmDlg('«' + m.title + '» o\'chirilsinmi?')) return;
-        try { await api('/api/admin/movie/delete', { id: m.id }); toast('🗑 O\'chirildi'); showTab('movies'); }
-        catch (e) { toast(errMsg(e)); }
-      }));
-      p.appendChild(r);
-    });
-    const publish = async (notify) => {
-      const msg = notify ? items.length + ' ta kino chiqarilsin va hamma foydalanuvchiga xabar yuborilsinmi?'
-                         : items.length + ' ta kino xabarsiz chiqarilsinmi?';
-      if (!await confirmDlg(msg)) return;
-      haptic('medium');
-      try {
-        const r = await api('/api/admin/publish', { notify });
-        toast('🚀 ' + r.published + ' ta kino chiqarildi' + (notify ? '. Xabar yuborilmoqda...' : ''), 3200);
-        showTab('movies');
-      } catch (e) { toast(errMsg(e)); }
-    };
-    p.appendChild(mkBtn('btn main full', '🚀 Hammasini chiqarish + xabar', () => publish(true)));
-    p.appendChild(mkBtn('btn2', '🤫 Xabarsiz chiqarish', () => publish(false)));
-    return p;
-  }
-
   TABS.movies = async () => {
     const wrap = el('div');
-    try {
-      const pend = await api('/api/admin/pending');
-      if (pend.items.length) wrap.appendChild(pendingPanel(pend.items));
-    } catch (e) {}
-    const si = el('input', 'inp'); si.type = 'search'; si.placeholder = '🔎 Kino nomi bo\'yicha qidirish...';
+    const si = el('input', 'inp'); si.type = 'search'; si.placeholder = '🔎 Nomi yoki kod (masalan s.1) bo\'yicha qidirish...';
     si.style.marginTop = '12px'; wrap.appendChild(si);
     const panel = el('div', 'panel'); const list = el('div'); panel.appendChild(list);
     const more = mkBtn('more', 'Yana yuklash', () => fetchPage(false)); more.hidden = true;
-    const info = el('div', 'note');
     wrap.append(panel, more);
     let q = '', offset = 0, total = 0, gen = 0;
 
@@ -652,36 +758,73 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     }
     function editView(m) {
       admBody.replaceChildren(); adm.scrollTop = 0;
-      const panel = el('div', 'panel');
-      panel.appendChild(el('h3', null, '✏️ Tahrirlash (kod: ' + m.id + ')'));
-      const F = movieForm(panel, m);
+      const p = el('div', 'panel');
+      p.appendChild(el('h3', null, '✏️ Tahrirlash (kod: ' + m.id + ')'));
+      const F = movieForm(p, m);
       const bar = el('div', 'two'); bar.style.marginTop = '14px';
       const save = mkBtn('btn main', '💾 Saqlash', async () => {
-        const body = { id: m.id }; Object.keys(F).forEach(k => body[k] = F[k].value.trim());
-        if (!body.title) { toast('Kino nomini kiriting'); F.title.focus(); return; }
-        if (body.year && !/^(18|19|20)\d{2}$/.test(body.year)) { toast('Yil noto\'g\'ri (masalan: 2024)'); F.year.focus(); return; }
+        if (!validMeta(F)) return;
         save.disabled = true;
-        try { await api('/api/admin/movie/update', body); haptic('medium'); toast('✅ Saqlandi'); showTab('movies'); }
+        try { await api('/api/admin/movie/update', { id: m.id, ...readForm(F) }); haptic('medium'); toast('✅ Saqlandi'); showTab('movies'); }
         catch (e) { toast(errMsg(e)); save.disabled = false; }
       });
       bar.append(save, mkBtn('btn2', 'Bekor qilish', () => showTab('movies')));
-      panel.appendChild(bar);
-      admBody.appendChild(panel);
+      p.appendChild(bar);
+      admBody.appendChild(p);
+    }
+    function seriesEditView(sr, eps) {
+      admBody.replaceChildren(); adm.scrollTop = 0;
+      const p = el('div', 'panel');
+      p.appendChild(el('h3', null, '✏️ ' + sr.code + ' — tahrirlash'));
+      const F = movieForm(p, sr, { noQuality: true, titleLabel: 'Serial / to\'plam nomi' });
+      const bar = el('div', 'two'); bar.style.marginTop = '14px';
+      const save = mkBtn('btn main', '💾 Saqlash', async () => {
+        if (!validMeta(F)) return;
+        save.disabled = true;
+        try { await api('/api/admin/series/update', { id: sr.id, ...readForm(F) }); haptic('medium'); toast('✅ Saqlandi'); showTab('movies'); }
+        catch (e) { toast(errMsg(e)); save.disabled = false; }
+      });
+      bar.append(save, mkBtn('btn2', 'Bekor qilish', () => showTab('movies')));
+      p.appendChild(bar);
+      admBody.appendChild(p);
+      const ep = el('div', 'panel');
+      ep.appendChild(el('h3', null, '🎞 Qismlar (' + eps.length + ')'));
+      ep.appendChild(el('div', 'note', 'Qism qo\'shish: «Avto» bo\'limi yoki «Qo\'shish» orqali. O\'chirish uchun 🗑 bosing.'));
+      eps.forEach(e => {
+        const r = el('div', 'row');
+        const g = el('div', 'grow');
+        g.appendChild(el('div', 'nm', e.ep + '-qism'));
+        g.appendChild(el('div', 'sm', e.live ? 'chiqarilgan' : '⏳ kutilmoqda'));
+        r.appendChild(g);
+        r.appendChild(mkBtn('ico', '🗑', async () => {
+          if (!await confirmDlg(e.ep + '-qism o\'chirilsinmi?')) return;
+          try { await api('/api/admin/movie/delete', { id: e.id }); r.remove(); toast('🗑 O\'chirildi'); }
+          catch (er) { toast(errMsg(er)); }
+        }));
+        ep.appendChild(r);
+      });
+      admBody.appendChild(ep);
     }
     function movieRow(m) {
       const r = el('div', 'row');
       const g = el('div', 'grow');
-      g.appendChild(el('div', 'nm', m.title + (m.year ? ' (' + m.year + ')' : '')));
-      g.appendChild(el('div', 'sm', 'kod: ' + m.id + ' • 👁 ' + m.views + (m.genre ? ' • ' + m.genre : '')));
+      const isS = m.t === 's';
+      g.appendChild(el('div', 'nm', (isS ? (KIND_LABEL[m.kind] || '📺').split(' ')[0] + ' ' : '') + m.title + (m.year ? ' (' + m.year + ')' : '')));
+      g.appendChild(el('div', 'sm', 'kod: ' + m.code + (isS ? ' • ' + m.eps + ' qism' : '') + ' • 👁 ' + m.views + (m.genre ? ' • ' + m.genre : '')));
       r.appendChild(g);
       r.appendChild(mkBtn('ico', '✏️', async () => {
-        try { editView((await api('/api/admin/movie/' + m.id)).movie); }
-        catch (e) { toast(errMsg(e)); }
+        try {
+          if (isS) { const d = await api('/api/admin/series/' + m.id); seriesEditView(d.series, d.eps); }
+          else editView((await api('/api/admin/movie/' + m.id)).movie);
+        } catch (e) { toast(errMsg(e)); }
       }));
       r.appendChild(mkBtn('ico', '🗑', async () => {
-        if (!await confirmDlg('«' + m.title + '» o\'chirilsinmi?')) return;
-        try { await api('/api/admin/movie/delete', { id: m.id }); r.remove(); total--; toast('🗑 O\'chirildi'); }
-        catch (e) { toast(errMsg(e)); }
+        const ask = isS ? '«' + m.title + '» va uning BARCHA qismlari o\'chirilsinmi?' : '«' + m.title + '» o\'chirilsinmi?';
+        if (!await confirmDlg(ask)) return;
+        try {
+          await api(isS ? '/api/admin/series/delete' : '/api/admin/movie/delete', { id: m.id });
+          r.remove(); total--; toast('🗑 O\'chirildi');
+        } catch (e) { toast(errMsg(e)); }
       }));
       return r;
     }
@@ -689,6 +832,164 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     await fetchPage(true);
     return wrap;
   };
+
+  /* ───── 3b) Avto-yuklash: [Sozlamalar] [Qo'shishga tayyor] ───── */
+  const SRC_LABEL = { kino: '🎬 Kino kanali', multfilm: '🧸 Multfilm kanali', anime: '🎌 Anime kanali', serial: '📺 Serial kanali' };
+
+  async function autoSub(fn) {
+    const my = ++admGen;
+    admBody.replaceChildren(loaderBox());
+    try {
+      const node = await fn();
+      if (my === admGen) { admBody.replaceChildren(node); adm.scrollTop = 0; }
+    } catch (e) {
+      if (my !== admGen) return;
+      const box = el('div', 'empty'); box.appendChild(el('div', 'e', '⚠️')); box.appendChild(el('b', null, 'Yuklab bo\'lmadi'));
+      box.appendChild(document.createTextNode(errMsg(e))); box.appendChild(el('div'));
+      box.appendChild(mkBtn('btn2', '⬅️ Orqaga', () => showTab('auto')));
+      admBody.replaceChildren(box);
+    }
+  }
+  const backBtn = () => mkBtn('btn2 back2', '⬅️ Avto-yuklash', () => showTab('auto'));
+
+  TABS.auto = async () => {
+    let total = 0;
+    try { total = (await api('/api/admin/pending')).total; } catch (e) {}
+    const wrap = el('div');
+    const mk = (icon, title, sub, cnt, fn) => {
+      const b = el('button', 'bigbtn');
+      b.appendChild(el('div', 'bi', icon));
+      const t = el('div'); t.appendChild(el('b', null, title)); t.appendChild(el('span', null, sub)); b.appendChild(t);
+      if (cnt != null) b.appendChild(el('div', 'cnt', String(cnt)));
+      b.onclick = () => { haptic(); fn(); };
+      return b;
+    };
+    wrap.appendChild(mk('⚙️', 'Sozlamalar', 'Kanallarni ulash: kino, multfilm, anime, serial', null, () => autoSub(autoSettings)));
+    wrap.appendChild(mk('✅', 'Qo\'shishga tayyor', total ? 'Kanaldan kelgan, chiqarishni kutayotganlar' : 'Hozircha hech narsa yo\'q', total, () => autoSub(autoReady)));
+    const n = el('div', 'note');
+    n.textContent = 'Kanalga video tashlang — bot o\'zi o\'qib «Qo\'shishga tayyor» ga yig\'adi. U yerdan bir tugma bilan chiqarasiz.';
+    wrap.appendChild(n);
+    return wrap;
+  };
+
+  async function autoSettings() {
+    const s = await api('/api/admin/settings');
+    const wrap = el('div'); wrap.appendChild(backBtn());
+    const list = el('div', 'panel');
+    list.appendChild(el('h3', null, '📥 Ulangan kanallar'));
+    if (!s.sources.length) list.appendChild(el('div', 'note', 'Hozircha kanal ulanmagan.'));
+    s.sources.forEach(c => {
+      const r = el('div', 'row');
+      const g = el('div', 'grow'); g.appendChild(el('div', 'nm', c.title));
+      const lab = c.series ? '📺 Qismli: «' + c.series.title + '» (' + c.series.code + ')' : (SRC_LABEL[c.kind] || c.kind);
+      g.appendChild(el('div', 'sm', lab));
+      r.appendChild(g);
+      r.appendChild(mkBtn('ico', '✕', async () => {
+        if (!await confirmDlg('«' + c.title + '» olib tashlansinmi? (kinolar o\'chmaydi)')) return;
+        try { await api('/api/admin/channel/delete', { kind: 'source', id: c.id }); toast('Olib tashlandi'); autoSub(autoSettings); }
+        catch (e) { toast(errMsg(e)); }
+      }));
+      list.appendChild(r);
+    });
+    wrap.appendChild(list);
+
+    const p = el('div', 'panel');
+    p.appendChild(el('h3', null, '➕ Kanal ulash'));
+    p.appendChild(el('div', 'note', 'Avval botni kanalga ADMIN qiling. Keyin kanal turini tanlang.'));
+    const state = { kind: 'kino', parts: false };
+    const ref = el('input', 'inp'); ref.placeholder = '@kanal_username yoki -100...';
+    p.appendChild(el('label', 'lbl', 'Kanal'));
+    p.appendChild(ref);
+    const how = el('div', 'note'); how.style.whiteSpace = 'pre-line'; how.style.color = 'var(--text)';
+    const body = el('div');
+    let F = {};
+    const render = () => {
+      body.replaceChildren(); F = {};
+      if (state.parts) {
+        how.textContent = 'Shu kanalga faqat BITTA serial/to\'plam qismlari tashlanadi. Pastda uning ma\'lumotlarini bir marta kiriting. Har videoning izohiga faqat qism raqamini yozing: 1, 2, 3...';
+        F = movieForm(body, null, { noQuality: true, titleLabel: 'Serial / to\'plam nomi' });
+      } else {
+        how.textContent = 'Har bir video izohi shunday bo\'lsin (faqat 1-qator shart):\nQasoskor\nYili: 2023\nJanri: Jangari, Drama\nDavlati: AQSH';
+      }
+    };
+    p.appendChild(el('label', 'lbl', 'Turi'));
+    p.appendChild(kindPicker(state, render));
+    p.appendChild(how); p.appendChild(body);
+    render();
+    const add = mkBtn('btn main full', '➕ Kanalni ulash', async () => {
+      const r0 = ref.value.trim(); if (!r0) { toast('Kanalni yozing'); ref.focus(); return; }
+      const data = { ref: r0, kind: state.kind, parts: state.parts };
+      if (state.parts) { if (!validMeta(F)) return; Object.assign(data, readForm(F)); }
+      add.disabled = true;
+      try { await api('/api/admin/source', data); toast('✅ Ulandi'); autoSub(autoSettings); }
+      catch (e) { toast(errMsg(e), 3600); add.disabled = false; }
+    });
+    p.appendChild(add);
+    wrap.appendChild(p);
+    return wrap;
+  }
+
+  async function autoReady() {
+    const d = await api('/api/admin/pending');
+    const wrap = el('div'); wrap.appendChild(backBtn());
+    if (!d.groups.length) {
+      const e = el('div', 'empty'); e.appendChild(el('div', 'e', '📭')); e.appendChild(el('b', null, 'Hozircha hech narsa yo\'q'));
+      e.appendChild(document.createTextNode('Kanalga kino yoki qism tashlang yoki kanal postlarini botga forward qiling.'));
+      wrap.appendChild(e); return wrap;
+    }
+    const head = el('div', 'panel'); head.appendChild(el('h3', null, '✅ Qo\'shishga tayyor: ' + d.total));
+    head.appendChild(el('div', 'note', 'Foydalanuvchilar hali ko\'rmaydi. Guruh ustiga bossangiz ro\'yxati ochiladi.'));
+    wrap.appendChild(head);
+
+    const NAMES = { kino: ['🎬', 'Kinolar'], multfilm: ['🧸', 'Multfilmlar'], anime: ['🎌', 'Animelar'] };
+    const publish = async (scope, notify, count) => {
+      const msg = count + ' ta chiqarilsinmi' + (notify ? ' va hamma foydalanuvchiga BITTA umumiy xabar yuborilsinmi?' : ' (xabarsiz)?');
+      if (!await confirmDlg(msg)) return;
+      haptic('medium');
+      try {
+        const r = await api('/api/admin/publish', { notify, scope });
+        toast('🚀 ' + r.published + ' ta chiqarildi' + (notify ? '. Xabar yuborilmoqda...' : ''), 3200);
+        autoSub(autoReady);
+      } catch (e) { toast(errMsg(e)); }
+    };
+    d.groups.forEach(g => {
+      const box = el('div', 'grp');
+      const h = el('div', 'gh');
+      const label = g.series
+        ? KIND_LABEL[g.kind].split(' ')[0] + ' ' + g.series.title + ' (' + g.series.code + ')'
+        : NAMES[g.kind][0] + ' ' + NAMES[g.kind][1];
+      h.appendChild(el('b', null, label));
+      h.appendChild(el('div', 'cnt', g.count + (g.series ? ' qism' : ' ta')));
+      box.appendChild(h);
+      const items = el('div', 'items'); items.hidden = true;
+      g.items.forEach(it => {
+        const r = el('div', 'row');
+        const gg = el('div', 'grow');
+        gg.appendChild(el('div', 'nm', g.series ? it.ep + '-qism' : it.title + (it.year ? ' (' + it.year + ')' : '')));
+        gg.appendChild(el('div', 'sm', 'kod: ' + it.id + (it.genre && !g.series ? ' • ' + it.genre : '')));
+        r.appendChild(gg);
+        r.appendChild(mkBtn('ico', '🗑', async () => {
+          if (!await confirmDlg('O\'chirilsinmi?')) return;
+          try { await api('/api/admin/movie/delete', { id: it.id }); toast('🗑 O\'chirildi'); autoSub(autoReady); }
+          catch (e) { toast(errMsg(e)); }
+        }));
+        items.appendChild(r);
+      });
+      box.appendChild(items);
+      h.onclick = () => { haptic(); items.hidden = !items.hidden; };
+      const pub = el('div', 'pub');
+      pub.appendChild(mkBtn('', '🚀 Chiqarish + xabar', () => publish(g.key, true, g.count)));
+      pub.appendChild(mkBtn('q', '🤫 Xabarsiz', () => publish(g.key, false, g.count)));
+      box.appendChild(pub);
+      wrap.appendChild(box);
+    });
+    const all = el('div', 'panel');
+    all.appendChild(el('h3', null, '🚀 Hammasini birdan chiqarish'));
+    all.appendChild(mkBtn('btn main full', 'Hammasi + bitta umumiy xabar', () => publish('all', true, d.total)));
+    all.appendChild(mkBtn('btn2', '🤫 Hammasi xabarsiz', () => publish('all', false, d.total)));
+    wrap.appendChild(all);
+    return wrap;
+  }
 
   /* ───── 4) Sozlamalar ───── */
   TABS.settings = async () => {
@@ -742,14 +1043,8 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       return p;
     };
     wrap.appendChild(chanPanel('📢 Majburiy obuna kanallari', 'Foydalanuvchi shu kanallarga obuna bo\'lmaguncha kino ko\'ra olmaydi. Avval botni kanalga admin qiling.', 'sub', s.channels));
-    wrap.appendChild(chanPanel('📥 Avto-yuklash kanallari', 'Shu kanalga kino tashlasangiz, bot izohdan nom, yil, janr, davlatni o\'zi o\'qib qo\'shadi. Botni kanalga admin qiling.', 'source', s.sources));
-    const help = el('div', 'panel');
-    help.appendChild(el('h3', null, '📝 Post izohi namunasi'));
-    const code = el('div', 'note'); code.style.whiteSpace = 'pre-line'; code.style.color = 'var(--text)';
-    code.textContent = 'Qasoskor\nYili: 2023\nJanri: Jangari, Drama\nDavlati: AQSH\nTili: O\'zbek tilida';
-    help.appendChild(code);
-    help.appendChild(el('div', 'note', 'Faqat birinchi qator (nom) shart, qolganlari ixtiyoriy.'));
-    wrap.appendChild(help);
+    const hint = el('div', 'note'); hint.textContent = '📥 Avto-yuklash kanallari endi «📥 Avto» bo\'limida.';
+    wrap.appendChild(hint);
     return wrap;
   };
 
@@ -764,6 +1059,10 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       S.favs = new Set(me.favs);
       const hi = $('#hi'); hi.replaceChildren(document.createTextNode('Salom, '), el('b', null, me.name), document.createTextNode(' 👋'));
       if (me.admin) $('#gear').hidden = false;
+    } catch (e) {}
+    try {
+      const q0 = (new URLSearchParams(location.search).get('q') || '').trim().slice(0, 80);
+      if (q0) { qi.value = q0; clr.hidden = false; S.q = q0; S.autoOpen = /^[sma]\s*\.\s*\d+$/i.test(q0); }
     } catch (e) {}
     load(true);
   }

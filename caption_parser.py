@@ -136,3 +136,37 @@ def parse_caption(text: str, filename: str | None = None) -> dict:
             if not out[k]:
                 out.pop(k)
     return out
+
+
+# ───────────── Qism raqami (serial / multfilm / anime) ─────────────
+_EP_WORDS = r"(?:qism|qismi|seriya|seriyasi|серия|серии|ep|episode|epizod|part|bo'?lim|chast|часть)"
+_EP_AFTER = re.compile(rf"(?<!\d)(\d{{1,4}})\s*[-–.]?\s*{_EP_WORDS}\b", re.I)
+_EP_BEFORE = re.compile(rf"\b{_EP_WORDS}\s*[-–:.#№]?\s*(\d{{1,4}})(?!\d)", re.I)
+_SXEY = re.compile(r"\bs\d{1,2}\s*e(\d{1,4})\b", re.I)
+_BARE = re.compile(r"^\W*#?\s*(\d{1,4})\W*$")
+_QUALITY_NUMS = {144, 240, 360, 480, 540, 720, 1080, 1440, 2160, 4320}
+
+
+def parse_episode(text: str | None, filename: str | None = None) -> int | None:
+    """Post izohidagi qism raqamini topadi: '1', '1-qism', 'Qism 3', 'S01E05', '12 seriya'...
+    Izohda raqam bo'lmasa fayl nomidagi oxirgi raqamga qaraydi. Topilmasa None."""
+    text = (text or "").strip()
+    for pat in (_BARE, _EP_AFTER, _EP_BEFORE, _SXEY):
+        for line in text.splitlines():
+            m = pat.search(line.strip()) if pat is not _BARE else pat.match(line.strip())
+            if m:
+                n = int(m.group(1))
+                if n > 0:
+                    return n
+    # izohning birinchi qatoridagi yagona mustaqil raqam (masalan: "Naruto 12")
+    first = text.splitlines()[0] if text else ""
+    nums = [int(x) for x in re.findall(r"(?<![\d.])(\d{1,3})(?![\d.])", first)
+            if int(x) not in _QUALITY_NUMS and int(x) > 0]
+    if len(nums) == 1 and not _YEAR.search(first):
+        return nums[0]
+    if filename:
+        base = _VIDEO_EXT.sub("", filename)
+        nums = [int(x) for x in re.findall(r"(?<!\d)(\d{1,3})(?!\d)", base) if int(x) not in _QUALITY_NUMS and int(x) > 0]
+        if nums:
+            return nums[-1]
+    return None

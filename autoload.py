@@ -85,12 +85,57 @@ async def _flush_notice(bot: Bot) -> None:
 
 
 # ───────────── Import ─────────────
+def _thumb(media) -> str:
+    return getattr(getattr(media, "thumbnail", None), "file_id", "") or ""
+
+
+async def import_episode(bot: Bot, series, media, ftype: str, caption: str | None,
+                         src_chat: int, src_msg: int, link: str) -> str:
+    """Qismli kontent: qism raqami postdagi izohdan olinadi. 'added' | 'dup' | 'noep' qaytaradi."""
+    ep = cp.parse_episode(caption, getattr(media, "file_name", None))
+    if not ep:
+        await svc.notify_admins(
+            bot,
+            f"⚠️ <b>{html.escape(series['title'])}</b>: qism raqami topilmadi — qo'shilmadi.\n\n"
+            "Video izohiga faqat qism raqamini yozing (masalan <code>3</code>). "
+            "Postni tahrirlasangiz bot qayta o'qiydi.\n" + (f"🔗 {link}" if link else ""),
+        )
+        return "noep"
+    if await db.episode_by_no(series["id"], ep):
+        queue_notice(bot, dup=True)
+        return "dup"
+    thumb = _thumb(media)
+    quality = cp.quality_from_size(media.width, media.height) if ftype == "video" else ""
+    data = {
+        "title": series["title"], "description": series["description"], "year": series["year"],
+        "genre": series["genre"], "country": series["country"], "language": series["language"],
+        "quality": quality, "file_id": media.file_id, "file_type": ftype, "poster": thumb,
+        "src_chat": src_chat, "src_msg": src_msg, "status": "pending",
+        "kind": series["kind"], "series_id": series["id"], "ep": ep,
+    }
+    try:
+        movie_id = await db.add_movie(data)
+    except sqlite3.IntegrityError:
+        return "dup"
+    if thumb and not series["poster_id"]:
+        await db.set_series_poster(series["id"], thumb)
+    backup.schedule(bot)
+    queue_notice(bot, f"{series['title']} — {ep}-qism", noposter_id=None if (thumb or series["poster_id"]) else movie_id)
+    return "added"
+
+
 async def import_media(bot: Bot, media, ftype: str, caption: str | None,
                        src_chat: int, src_msg: int, link: str = "") -> str:
-    """Bitta kinoni «kutilmoqda» holatida bazaga qo'shadi. 'added' | 'dup' | 'notitle' qaytaradi."""
+    """Bitta kinoni/qismni «kutilmoqda» holatida bazaga qo'shadi. 'added' | 'dup' | 'notitle' | 'noep'."""
     if await db.movie_by_source(src_chat, src_msg):
         queue_notice(bot, dup=True)
         return "dup"
+    source = await db.get_source(src_chat)
+    if source and source["series_id"]:
+        series = await db.get_series(source["series_id"])
+        if series:
+            return await import_episode(bot, series, media, ftype, caption, src_chat, src_msg, link)
+    kind = source["kind"] if source and source["kind"] in ("kino", "multfilm", "anime") else "kino"
     info = cp.parse_caption(caption or "", getattr(media, "file_name", None))
     if not info.get("title"):
         await svc.notify_admins(
@@ -101,7 +146,7 @@ async def import_media(bot: Bot, media, ftype: str, caption: str | None,
         )
         return "notitle"
 
-    thumb = getattr(getattr(media, "thumbnail", None), "file_id", "") or ""
+    thumb = _thumb(media)
     quality = info.get("quality") or (cp.quality_from_size(media.width, media.height) if ftype == "video" else "")
     data = {
         **info,
@@ -112,6 +157,7 @@ async def import_media(bot: Bot, media, ftype: str, caption: str | None,
         "src_chat": src_chat,
         "src_msg": src_msg,
         "status": "pending",
+        "kind": kind,
     }
     try:
         movie_id = await db.add_movie(data)
@@ -131,9 +177,23 @@ async def process(m: Message, bot: Bot, edited: bool) -> None:
         return
     existing = await db.movie_by_source(m.chat.id, m.message_id)
     if existing:
-        # Post izohi tahrirlansa — kino ma'lumotlari ham yangilanadi (fayl va poster tegilmaydi)
+        if not edited:
+            return
+        if existing["series_id"]:
+            # Qism: izoh tahrirlansa qism raqami yangilanadi
+            ep = cp.parse_episode(m.caption, getattr(media, "file_name", None))
+            if ep and ep != existing["ep"]:
+                try:
+                    await db.set_episode_no(existing["id"], ep)
+                except sqlite3.IntegrityError:
+                    await svc.notify_admins(bot, f"⚠️ {ep}-qism allaqachon mavjud — o'zgartirilmadi.")
+                    return
+                await svc.notify_admins(
+                    bot, f"✏️ <b>{html.escape(existing['title'])}</b>: qism raqami {ep} ga o'zgartirildi")
+            return
+        # Kino: post izohi tahrirlansa — ma'lumotlar ham yangilanadi (fayl va poster tegilmaydi)
         info = cp.parse_caption(m.caption or "", getattr(media, "file_name", None))
-        if edited and info.get("title"):
+        if info.get("title"):
             await db.update_movie_meta(existing["id"], info)
             await svc.notify_admins(
                 bot, f"✏️ Yangilandi: <b>{html.escape(info['title'])}</b> (kod: <code>{existing['id']}</code>)"

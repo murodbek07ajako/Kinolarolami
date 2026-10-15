@@ -2,6 +2,7 @@
 import html
 import os
 import re
+import sqlite3
 import tempfile
 
 from aiogram import Bot, F, Router
@@ -238,12 +239,22 @@ async def add_skip(c: CallbackQuery, state: FSMContext):
 async def announce_saved(m: Message, movie_id: int, data: dict) -> None:
     me = await m.bot.me()
     title = html.escape(data["title"]) + (f" ({html.escape(data['year'])})" if data.get("year") else "")
-    text = (
-        "✅ <b>Kino qo'shildi!</b>\n\n"
-        f"🎬 <b>{title}</b>\n\n"
-        f"🔢 Kino kodi: <code>{movie_id}</code>\n"
-        f"🔗 Havola: <code>t.me/{me.username}?start=m_{movie_id}</code>"
-    )
+    emoji = svc.KIND_EMOJI.get(data.get("kind", "kino"), "🎬")
+    if data.get("series_id"):
+        code = db.series_code(data["kind"], data["series_id"])
+        text = (
+            "✅ <b>Qism qo'shildi!</b>\n\n"
+            f"{emoji} <b>{title}</b> — <b>{data['ep']}-qism</b>\n\n"
+            f"🔢 Serial kodi: <code>{code}</code>\n"
+            f"🔗 Qism havolasi: <code>t.me/{me.username}?start=m_{movie_id}</code>"
+        )
+    else:
+        text = (
+            "✅ <b>Kino qo'shildi!</b>\n\n"
+            f"{emoji} <b>{title}</b>\n\n"
+            f"🔢 Kino kodi: <code>{movie_id}</code>\n"
+            f"🔗 Havola: <code>t.me/{me.username}?start=m_{movie_id}</code>"
+        )
     await m.answer(text, reply_markup=kb.added_kb(movie_id))
     backup.schedule(m.bot)  # baza nusxasini adminga yuboradi (yo'qolib qolmasligi uchun)
 
@@ -293,7 +304,29 @@ async def draft_video(m: Message, bot: Bot):
         data["poster"] = _thumb_id(media)
     if not data.get("quality") and m.video:
         data["quality"] = cp.quality_from_size(m.video.width, m.video.height)
-    movie_id = await db.add_movie(data)
+    if data.get("kind") not in db.KINDS:
+        data["kind"] = "kino"
+    if data.get("series_id"):
+        ser = await db.get_series(int(data["series_id"]))
+        if not ser or not data.get("ep"):
+            await db.clear_draft(m.from_user.id)
+            await m.answer("❌ Serial topilmadi (o'chirilgan bo'lishi mumkin). Qaytadan boshlang.")
+            return
+        data.update(
+            title=ser["title"], description=ser["description"], year=ser["year"], genre=ser["genre"],
+            country=ser["country"], language=ser["language"], kind=ser["kind"], series_id=ser["id"],
+            ep=int(data["ep"]),
+        )
+    try:
+        movie_id = await db.add_movie(data)
+    except sqlite3.IntegrityError:
+        await db.clear_draft(m.from_user.id)
+        await m.answer(f"❌ {data.get('ep')}-qism allaqachon mavjud. Boshqa raqam bilan qaytadan boshlang.")
+        return
+    if data.get("series_id") and data.get("poster"):
+        ser = await db.get_series(data["series_id"])
+        if ser and not ser["poster_id"]:
+            await db.set_series_poster(ser["id"], data["poster"])
     await db.clear_draft(m.from_user.id)
     await announce_saved(m, movie_id, data)
 
@@ -313,8 +346,17 @@ async def draft_photo(m: Message):
 @router.message(Command("poster"))
 async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
     arg = (command.args or "").strip()
+    code = db.parse_series_code(arg)
+    if code:
+        ser = await db.get_series(code[1])
+        if not ser or ser["kind"] != code[0]:
+            return await m.answer("❌ Bunday kodli serial topilmadi.")
+        await state.set_state(PosterSet.wait)
+        await state.update_data(series_id=ser["id"])
+        return await m.answer(f"🖼 <b>{html.escape(ser['title'])}</b> uchun yangi poster (rasm) yuboring:",
+                              reply_markup=kb.cancel_kb())
     if not arg.isdigit():
-        return await m.answer("Foydalanish: <code>/poster 12</code> (12 — kino kodi)")
+        return await m.answer("Foydalanish: <code>/poster 12</code> yoki <code>/poster s.3</code> (kod)")
     movie = await db.get_movie(int(arg))
     if not movie:
         return await m.answer("❌ Bunday kodli kino topilmadi.")
@@ -327,7 +369,10 @@ async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
 @router.message(PosterSet.wait, F.photo)
 async def poster_set(m: Message, state: FSMContext):
     data = await state.get_data()
-    await db.set_poster(data["movie_id"], m.photo[-1].file_id)
+    if data.get("series_id"):
+        await db.set_series_poster(data["series_id"], m.photo[-1].file_id)
+    else:
+        await db.set_poster(data["movie_id"], m.photo[-1].file_id)
     await state.clear()
     await m.answer("✅ Poster yangilandi.", reply_markup=kb.back_admin_kb())
 
@@ -389,20 +434,35 @@ async def cb_list(c: CallbackQuery):
 
 
 # ───────────── Kutilayotgan kinolar (kanaldan kelganlar) ─────────────
+def pending_text(groups) -> str:
+    total = sum(len(g["rows"]) for g in groups)
+    lines = [f"⏳ <b>Kutilayotganlar: {total}</b>\n<i>Foydalanuvchilar hali ko'rmaydi.</i>\n"]
+    names = {"kino": "🎬 Kinolar", "multfilm": "🧸 Multfilmlar", "anime": "🎌 Animelar"}
+    for g in groups:
+        if g["series"]:
+            ser = g["series"]
+            eps = ", ".join(str(r["ep"]) for r in g["rows"][:30])
+            lines.append(f"{svc.KIND_EMOJI.get(ser['kind'], '📺')} <b>{html.escape(ser['title'])}</b> "
+                         f"(<code>{db.series_code(ser['kind'], ser['id'])}</code>): {len(g['rows'])} qism — {eps}")
+        else:
+            lines.append(f"{names.get(g['kind'], '🎬 Kinolar')}: <b>{len(g['rows'])}</b> ta")
+            for r in g["rows"][:15]:
+                lines.append(f"  • <code>{r['id']}</code> {html.escape(r['title'])}"
+                             + (f" ({r['year']})" if r["year"] else ""))
+            if len(g["rows"]) > 15:
+                lines.append(f"  …va yana {len(g['rows']) - 15} ta")
+    return "\n".join(lines)[:4000]
+
+
 @router.callback_query(F.data == "adm:pend")
 async def cb_pending(c: CallbackQuery):
-    rows = await db.pending_movies()
-    if not rows:
+    groups = await db.pending_groups()
+    if not groups:
         text = ("⏳ <b>Kutilayotgan kino yo'q.</b>\n\n"
                 "Avto-yuklash kanaliga kino tashlang yoki kanal postlarini shu botga <b>forward</b> qiling.")
         markup = kb.back_admin_kb()
     else:
-        lines = [f"<code>{r['id']}</code> — {html.escape(r['title'])}" + (f" ({r['year']})" if r["year"] else "")
-                 + (f" • {html.escape(r['genre'])}" if r["genre"] else "") for r in rows[:40]]
-        more = f"\n…va yana {len(rows) - 40} ta" if len(rows) > 40 else ""
-        text = (f"⏳ <b>Kutilayotgan kinolar: {len(rows)}</b>\n<i>Foydalanuvchilar hali ko'rmaydi.</i>\n\n"
-                + "\n".join(lines) + more)
-        markup = kb.pending_kb()
+        text, markup = pending_text(groups), kb.pending_kb()
     await c.answer()
     try:
         await c.message.edit_text(text[:4000], reply_markup=markup)
@@ -418,7 +478,7 @@ async def cb_publish(c: CallbackQuery, bot: Bot):
         return await c.answer("Kutilayotgan kino yo'q", show_alert=True)
     await c.answer("🚀 Chiqarildi!")
     extra = "\n📣 Foydalanuvchilarga xabar yuborilmoqda, tugagach hisobot keladi." if notify else ""
-    await c.message.edit_text(f"✅ <b>{n} ta kino chiqarildi!</b>{extra}", reply_markup=kb.back_admin_kb())
+    await c.message.edit_text(f"✅ <b>{n} ta kino/qism chiqarildi!</b>{extra}", reply_markup=kb.back_admin_kb())
 
 
 # ───────────── Kanallar: majburiy obuna va avto-yuklash manbalari ─────────────
@@ -440,7 +500,8 @@ SOURCE_HELP = (
     "📥 <b>Avto-yuklash kanallari</b>\n\n"
     "Shu kanallarga tashlangan kino (video/fayl) bot tomonidan <b>avtomatik</b> o'qiladi va "
     "<b>«⏳ Kutilayotganlar»</b> ga tushadi. Tayyor bo'lgach bitta tugma bilan hammasini chiqarasiz.\n"
-    "Kanalda oldindan turgan kinolar uchun postlarni botga <b>forward</b> qiling.\n\n"
+    "Kanalda oldindan turgan kinolar uchun postlarni botga <b>forward</b> qiling.\n"
+    "🧸🎌📺 Tur tanlash va <b>qismli</b> (serial) kanal ulash — katalogdagi ⚙️ → «📥 Avto-yuklash» bo'limida.\n\n"
     "📝 <b>Post izohi (caption) shunday bo'lsin:</b>\n"
     "<code>Qasoskor\nYili: 2023\nJanri: Jangari, Drama\nDavlati: AQSH\nTili: O'zbek tilida</code>\n"
     "<i>Faqat birinchi qator (nom) shart, qolganlari ixtiyoriy.</i>\n\n"
@@ -451,7 +512,12 @@ async def sources_text() -> tuple[str, list]:
     srcs = await db.list_sources()
     if not srcs:
         return SOURCE_HELP + "Hozircha kanal ulanmagan.", srcs
-    lines = [f"{i}. {html.escape(s['title'] or str(s['chat_id']))}" for i, s in enumerate(srcs, 1)]
+    lines = []
+    for i, s in enumerate(srcs, 1):
+        label = {"kino": "🎬 kino", "multfilm": "🧸 multfilm", "anime": "🎌 anime"}.get(s["kind"], s["kind"])
+        if s["series_id"]:
+            label = "📺 qismli (serial)"
+        lines.append(f"{i}. {html.escape(s['title'] or str(s['chat_id']))} — {label}")
     return SOURCE_HELP + "<b>Ulangan kanallar:</b>\n" + "\n".join(lines), srcs
 
 
