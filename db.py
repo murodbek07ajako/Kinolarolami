@@ -252,6 +252,18 @@ async def update_movie_meta(mid: int, d: dict) -> None:
     )
 
 
+async def replace_movie_meta(mid: int, d: dict) -> None:
+    """Admin tahriri: maydonlar to'liq almashtiriladi (bo'sh qiymat = tozalash)."""
+    cur = {k: d.get(k, "") or "" for k in META_FIELDS}
+    search, genre_lc = _derive(cur)
+    await _run(
+        """UPDATE movies SET title=?, description=?, year=?, genre=?, genre_lc=?, country=?,
+                             language=?, quality=?, search_text=? WHERE id=?""",
+        (cur["title"], cur["description"], cur["year"], cur["genre"], genre_lc, cur["country"],
+         cur["language"], cur["quality"], search, mid),
+    )
+
+
 async def set_poster(mid: int, poster_id: str) -> None:
     await _run("UPDATE movies SET poster_id=? WHERE id=?", (poster_id, mid))
 

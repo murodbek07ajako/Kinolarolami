@@ -246,6 +246,28 @@ async def api_admin_publish(request: web.Request):
     return web.json_response({"published": n})
 
 
+async def api_admin_movie_get(request: web.Request):
+    _admin(request)
+    m = await db.get_movie(int(request.match_info["id"]))
+    if not m:
+        raise web.HTTPNotFound(reason="not found")
+    return web.json_response({"movie": {"id": m["id"], **{k: m[k] or "" for k in db.META_FIELDS}}})
+
+
+async def api_admin_movie_update(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    mid = int(body.get("id", 0))
+    if not await db.get_movie(mid):
+        raise web.HTTPNotFound(reason="not found")
+    try:
+        d = _clean_draft(body)
+    except ValueError as e:
+        return _bad(str(e))
+    await db.replace_movie_meta(mid, d)
+    return web.json_response({"ok": True})
+
+
 async def api_admin_movie_del(request: web.Request):
     _admin(request)
     body = await request.json()
@@ -327,6 +349,8 @@ def make_app(bot) -> web.Application:
     r.add_post("/api/admin/channel/delete", api_admin_channel_del)
     r.add_get("/api/admin/pending", api_admin_pending)
     r.add_post("/api/admin/publish", api_admin_publish)
+    r.add_get(r"/api/admin/movie/{id:\d+}", api_admin_movie_get)
+    r.add_post("/api/admin/movie/update", api_admin_movie_update)
     r.add_post("/api/admin/movie/delete", api_admin_movie_del)
     r.add_get("/api/admin/draft", api_admin_draft_get)
     r.add_post("/api/admin/draft", api_admin_draft_save)

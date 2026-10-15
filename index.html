@@ -503,26 +503,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     return d;
   }
 
-  TABS.add = async () => {
-    const wrap = el('div');
-    let draft = null;
-    try { draft = (await api('/api/admin/draft')).draft; } catch (e) {}
-    if (draft) {
-      const n = el('div', 'notice');
-      n.appendChild(document.createTextNode('⏳ Video kutilmoqda: '));
-      n.appendChild(el('b', null, draft.title));
-      n.appendChild(document.createTextNode('. Botga o\'ting va kinoni (video/fayl) yuboring.'));
-      n.appendChild(el('div'));
-      n.appendChild(mkBtn('btn2', '❌ Bekor qilish', async () => {
-        try { await api('/api/admin/draft/clear', {}); toast('Bekor qilindi'); showTab('add'); }
-        catch (e) { toast(errMsg(e)); }
-      }));
-      wrap.appendChild(n);
-    }
-
-    const panel = el('div', 'panel');
-    panel.appendChild(el('h3', null, '🎬 Yangi kino ma\'lumotlari'));
-    panel.appendChild(el('div', 'note', 'Hammasini to\'ldirib saqlang. Keyin bot kinoning o\'zini (video) so\'raydi — Telegram cheklovi tufayli faylni shu yerning o\'zidan yuklab bo\'lmaydi.'));
+  function movieForm(panel, init) {
     const F = {};
     const field = (key, label, required, input) => {
       const l = el('label', 'lbl', label + (required ? ' ' : ''));
@@ -561,6 +542,33 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     panel.appendChild(chips(F.language, ['O\'zbek tilida', 'Rus tilida', 'Ingliz tilida'], false));
     const ta = el('textarea', 'inp'); ta.placeholder = 'Kino haqida qisqacha...'; ta.maxLength = 800;
     field('description', 'Tavsif', false, ta);
+
+    Object.keys(F).forEach(k => { if (init && init[k]) F[k].value = init[k]; });
+    Object.values(F).forEach(i => i.dispatchEvent(new Event('input')));
+    return F;
+  }
+
+  TABS.add = async () => {
+    const wrap = el('div');
+    let draft = null;
+    try { draft = (await api('/api/admin/draft')).draft; } catch (e) {}
+    if (draft) {
+      const n = el('div', 'notice');
+      n.appendChild(document.createTextNode('⏳ Video kutilmoqda: '));
+      n.appendChild(el('b', null, draft.title));
+      n.appendChild(document.createTextNode('. Botga o\'ting va kinoni (video/fayl) yuboring.'));
+      n.appendChild(el('div'));
+      n.appendChild(mkBtn('btn2', '❌ Bekor qilish', async () => {
+        try { await api('/api/admin/draft/clear', {}); toast('Bekor qilindi'); showTab('add'); }
+        catch (e) { toast(errMsg(e)); }
+      }));
+      wrap.appendChild(n);
+    }
+
+    const panel = el('div', 'panel');
+    panel.appendChild(el('h3', null, '🎬 Yangi kino ma\'lumotlari'));
+    panel.appendChild(el('div', 'note', 'Hammasini to\'ldirib saqlang. Keyin bot kinoning o\'zini (video) so\'raydi — Telegram cheklovi tufayli faylni shu yerning o\'zidan yuklab bo\'lmaydi.'));
+    const F = movieForm(panel);
 
     const save = mkBtn('btn main full', '💾 Saqlash va davom etish', async () => {
       const body = {}; Object.keys(F).forEach(k => body[k] = F[k].value.trim());
@@ -642,12 +650,34 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
         if (!total) { list.replaceChildren(el('div', 'note', q ? 'Hech narsa topilmadi.' : 'Hozircha kinolar yo\'q.')); }
       } catch (e) { toast(errMsg(e)); }
     }
+    function editView(m) {
+      admBody.replaceChildren(); adm.scrollTop = 0;
+      const panel = el('div', 'panel');
+      panel.appendChild(el('h3', null, '✏️ Tahrirlash (kod: ' + m.id + ')'));
+      const F = movieForm(panel, m);
+      const bar = el('div', 'two'); bar.style.marginTop = '14px';
+      const save = mkBtn('btn main', '💾 Saqlash', async () => {
+        const body = { id: m.id }; Object.keys(F).forEach(k => body[k] = F[k].value.trim());
+        if (!body.title) { toast('Kino nomini kiriting'); F.title.focus(); return; }
+        if (body.year && !/^(18|19|20)\d{2}$/.test(body.year)) { toast('Yil noto\'g\'ri (masalan: 2024)'); F.year.focus(); return; }
+        save.disabled = true;
+        try { await api('/api/admin/movie/update', body); haptic('medium'); toast('✅ Saqlandi'); showTab('movies'); }
+        catch (e) { toast(errMsg(e)); save.disabled = false; }
+      });
+      bar.append(save, mkBtn('btn2', 'Bekor qilish', () => showTab('movies')));
+      panel.appendChild(bar);
+      admBody.appendChild(panel);
+    }
     function movieRow(m) {
       const r = el('div', 'row');
       const g = el('div', 'grow');
       g.appendChild(el('div', 'nm', m.title + (m.year ? ' (' + m.year + ')' : '')));
       g.appendChild(el('div', 'sm', 'kod: ' + m.id + ' • 👁 ' + m.views + (m.genre ? ' • ' + m.genre : '')));
       r.appendChild(g);
+      r.appendChild(mkBtn('ico', '✏️', async () => {
+        try { editView((await api('/api/admin/movie/' + m.id)).movie); }
+        catch (e) { toast(errMsg(e)); }
+      }));
       r.appendChild(mkBtn('ico', '🗑', async () => {
         if (!await confirmDlg('«' + m.title + '» o\'chirilsinmi?')) return;
         try { await api('/api/admin/movie/delete', { id: m.id }); r.remove(); total--; toast('🗑 O\'chirildi'); }
