@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS movies(
   views INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   src_chat INTEGER,
-  src_msg INTEGER
+  src_msg INTEGER,
+  status TEXT NOT NULL DEFAULT 'live'
 );
 CREATE TABLE IF NOT EXISTS sources(
   chat_id INTEGER PRIMARY KEY,
@@ -96,6 +97,8 @@ async def _migrate() -> None:
     for name in ("src_chat", "src_msg"):
         if name not in cols:
             await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} INTEGER")
+    if "status" not in cols:
+        await _db.execute("ALTER TABLE movies ADD COLUMN status TEXT NOT NULL DEFAULT 'live'")
     # Bir kanal postidan bitta kino (takroriy qo'shilishdan himoya)
     await _db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_src ON movies(src_chat, src_msg) WHERE src_chat IS NOT NULL"
@@ -222,13 +225,13 @@ async def add_movie(d: dict) -> int:
     search, genre_lc = _derive(d)
     return await _run(
         """INSERT INTO movies(title, description, year, genre, genre_lc, country, language, quality,
-                              file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                              file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg, status)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""), genre_lc,
             d.get("country", ""), d.get("language", ""), d.get("quality", ""),
             d["file_id"], d.get("file_type", "video"), d.get("poster", ""), search, int(time.time()),
-            d.get("src_chat"), d.get("src_msg"),
+            d.get("src_chat"), d.get("src_msg"), d.get("status", "live"),
         ),
     )
 
@@ -257,6 +260,18 @@ async def get_movie(mid: int):
     return await _one("SELECT * FROM movies WHERE id=?", (mid,))
 
 
+async def pending_movies():
+    return await _all("SELECT * FROM movies WHERE status='pending' ORDER BY id")
+
+
+async def publish_pending() -> list[int]:
+    """Barcha kutilayotgan kinolarni chiqaradi (live). Chiqarilgan kinolar id ro'yxatini qaytaradi."""
+    ids = [r["id"] for r in await pending_movies()]
+    if ids:
+        await _run("UPDATE movies SET status='live' WHERE status='pending'")
+    return ids
+
+
 async def movie_by_source(chat_id: int, msg_id: int):
     return await _one("SELECT * FROM movies WHERE src_chat=? AND src_msg=?", (chat_id, msg_id))
 
@@ -275,14 +290,16 @@ _ORDER = {
 
 
 async def search_movies(q: str = "", genre: str = "", sort: str = "new",
-                        limit: int = 20, offset: int = 0, fav_user: int | None = None):
-    """(qatorlar, jami) qaytaradi."""
+                        limit: int = 20, offset: int = 0, fav_user: int | None = None,
+                        status: str = "live"):
+    """(qatorlar, jami) qaytaradi. Odatda faqat chiqarilgan (live) kinolar."""
     frm = "FROM movies m"
     params: list = []
     if fav_user is not None:
         frm += " JOIN favorites f ON f.movie_id=m.id AND f.user_id=?"
         params.append(fav_user)
-    where = []
+    where = ["m.status = ?"]
+    params.append(status)
     for w in norm(q).split():
         where.append("m.search_text LIKE ?")
         params.append(f"%{w}%")
@@ -297,19 +314,19 @@ async def search_movies(q: str = "", genre: str = "", sort: str = "new",
 
 
 async def top_movies(limit: int = 10):
-    return await _all("SELECT * FROM movies ORDER BY views DESC, id DESC LIMIT ?", (limit,))
+    return await _all("SELECT * FROM movies WHERE status='live' ORDER BY views DESC, id DESC LIMIT ?", (limit,))
 
 
 async def new_movies(limit: int = 10):
-    return await _all("SELECT * FROM movies ORDER BY id DESC LIMIT ?", (limit,))
+    return await _all("SELECT * FROM movies WHERE status='live' ORDER BY id DESC LIMIT ?", (limit,))
 
 
 async def random_movie():
-    return await _one("SELECT * FROM movies ORDER BY RANDOM() LIMIT 1")
+    return await _one("SELECT * FROM movies WHERE status='live' ORDER BY RANDOM() LIMIT 1")
 
 
 async def genres(limit: int = 24) -> list[str]:
-    rows = await _all("SELECT genre FROM movies WHERE genre != ''")
+    rows = await _all("SELECT genre FROM movies WHERE genre != '' AND status='live'")
     count: dict[str, int] = {}
     shown: dict[str, str] = {}
     for r in rows:
@@ -351,7 +368,7 @@ async def fav_ids(uid: int) -> list[int]:
 
 async def fav_movies(uid: int, limit: int = 30):
     return await _all(
-        "SELECT m.* FROM movies m JOIN favorites f ON f.movie_id=m.id WHERE f.user_id=? ORDER BY m.id DESC LIMIT ?",
+        "SELECT m.* FROM movies m JOIN favorites f ON f.movie_id=m.id WHERE f.user_id=? AND m.status='live' ORDER BY m.id DESC LIMIT ?",
         (uid, limit),
     )
 
@@ -442,7 +459,8 @@ async def stats() -> dict:
         "active_day": (await one("SELECT COUNT(*) c FROM users WHERE last_active>=?", (day,)))["c"],
         "banned": (await one("SELECT COUNT(*) c FROM users WHERE banned=1"))["c"],
         "blocked": (await one("SELECT COUNT(*) c FROM users WHERE blocked=1"))["c"],
-        "movies": (await one("SELECT COUNT(*) c FROM movies"))["c"],
+        "movies": (await one("SELECT COUNT(*) c FROM movies WHERE status='live'"))["c"],
+        "pending": (await one("SELECT COUNT(*) c FROM movies WHERE status='pending'"))["c"],
         "views": (await one("SELECT COUNT(*) c FROM views"))["c"],
         "views_day": (await one("SELECT COUNT(*) c FROM views WHERE at>=?", (day,)))["c"],
         "channels": (await one("SELECT COUNT(*) c FROM channels"))["c"],

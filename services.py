@@ -89,7 +89,7 @@ async def send_movie(bot: Bot, chat_id: int, user_id: int, movie) -> None:
 async def deliver(bot: Bot, chat_id: int, user_id: int, movie_id: int) -> str:
     """Kinoni yuboradi. Natija: 'ok' | 'sub' | 'nf' (topilmadi) | 'err' (yuborib bo'lmadi)."""
     movie = await db.get_movie(movie_id)
-    if not movie:
+    if not movie or (movie["status"] != "live" and user_id not in config.ADMIN_IDS):
         return "nf"
     bad = await unsubscribed(bot, user_id)
     if bad:

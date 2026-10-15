@@ -468,7 +468,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       ['👥 Foydalanuvchilar', s.users], ['🆕 Bugun qo\'shilgan', s.new_day],
       ['🟢 24 soatda faol', s.active_day], ['📅 7 kunda qo\'shilgan', s.new_week],
       ['🎬 Kinolar', s.movies], ['👁 Jami ko\'rishlar', s.views],
-      ['📈 Bugungi ko\'rishlar', s.views_day], ['😶 Bloklaganlar', s.blocked],
+      ['📈 Bugungi ko\'rishlar', s.views_day], ['⏳ Kutilmoqda', s.pending],
     ].forEach(([label, val]) => {
       const c = el('div', 'stat'); c.appendChild(el('b', null, String(val))); c.appendChild(el('span', null, label)); grid.appendChild(c);
     });
@@ -582,10 +582,47 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   };
 
   /* ───── 3) Kinolar ro'yxati ───── */
+  function pendingPanel(items) {
+    const p = el('div', 'panel');
+    p.appendChild(el('h3', null, '⏳ Kutilayotganlar (' + items.length + ')'));
+    p.appendChild(el('div', 'note', 'Kanaldan kelgan kinolar. Foydalanuvchilar hali ko\'rmaydi — tayyor bo\'lgach chiqaring.'));
+    items.forEach(m => {
+      const r = el('div', 'row');
+      const g = el('div', 'grow');
+      g.appendChild(el('div', 'nm', m.title + (m.year ? ' (' + m.year + ')' : '')));
+      g.appendChild(el('div', 'sm', 'kod: ' + m.id + (m.genre ? ' • ' + m.genre : '')));
+      r.appendChild(g);
+      r.appendChild(mkBtn('ico', '🗑', async () => {
+        if (!await confirmDlg('«' + m.title + '» o\'chirilsinmi?')) return;
+        try { await api('/api/admin/movie/delete', { id: m.id }); toast('🗑 O\'chirildi'); showTab('movies'); }
+        catch (e) { toast(errMsg(e)); }
+      }));
+      p.appendChild(r);
+    });
+    const publish = async (notify) => {
+      const msg = notify ? items.length + ' ta kino chiqarilsin va hamma foydalanuvchiga xabar yuborilsinmi?'
+                         : items.length + ' ta kino xabarsiz chiqarilsinmi?';
+      if (!await confirmDlg(msg)) return;
+      haptic('medium');
+      try {
+        const r = await api('/api/admin/publish', { notify });
+        toast('🚀 ' + r.published + ' ta kino chiqarildi' + (notify ? '. Xabar yuborilmoqda...' : ''), 3200);
+        showTab('movies');
+      } catch (e) { toast(errMsg(e)); }
+    };
+    p.appendChild(mkBtn('btn main full', '🚀 Hammasini chiqarish + xabar', () => publish(true)));
+    p.appendChild(mkBtn('btn2', '🤫 Xabarsiz chiqarish', () => publish(false)));
+    return p;
+  }
+
   TABS.movies = async () => {
     const wrap = el('div');
+    try {
+      const pend = await api('/api/admin/pending');
+      if (pend.items.length) wrap.appendChild(pendingPanel(pend.items));
+    } catch (e) {}
     const si = el('input', 'inp'); si.type = 'search'; si.placeholder = '🔎 Kino nomi bo\'yicha qidirish...';
-    wrap.appendChild(si);
+    si.style.marginTop = '12px'; wrap.appendChild(si);
     const panel = el('div', 'panel'); const list = el('div'); panel.appendChild(list);
     const more = mkBtn('more', 'Yana yuklash', () => fetchPage(false)); more.hidden = true;
     const info = el('div', 'note');
@@ -645,7 +682,6 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     };
     toggle('🔒', 'Kontentni himoyalash', 'Forward va saqlashni taqiqlash', 'protect_content');
     toggle('📢', 'Majburiy obuna', 'Kanallarga obuna bo\'lmaguncha kino yuborilmaydi', 'sub_required');
-    toggle('📣', 'Avto-tarqatish', 'Kanaldan yangi kino kelsa, hammaga e\'lon yuboriladi', 'auto_post');
     wrap.appendChild(general);
 
     const chanPanel = (title, note, kind, list) => {

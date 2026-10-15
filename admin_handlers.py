@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup, default_state
 from aiogram.types import CallbackQuery, Message, MessageOriginChannel
 
+import autoload
 import backup
 import broadcast
 import caption_parser as cp
@@ -66,17 +67,20 @@ FIELDS = [
     ("poster", "🖼 <b>Poster</b> (rasm) yuboring — katalogda ko'rinadi:", True),
 ]
 
-SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1", "auto_post": "1"}
+SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
 
 
 async def panel_text() -> str:
     s = await db.stats()
-    return (
+    text = (
         "👨‍💻 <b>Admin panel</b>\n\n"
         f"👥 Foydalanuvchilar: <b>{s['users']}</b>\n"
         f"🎬 Kinolar: <b>{s['movies']}</b>\n"
         f"👁 Ko'rishlar: <b>{s['views']}</b>"
     )
+    if s["pending"]:
+        text += f"\n⏳ Kutilayotgan kinolar: <b>{s['pending']}</b>"
+    return text
 
 
 async def show_panel(target: Message | CallbackQuery) -> None:
@@ -257,13 +261,26 @@ async def finish_add(m: Message, state: FSMContext) -> None:
 
 # ───────────── Kino qo'shish (Mini App qoralamasi + video) ─────────────
 @router.message(StateFilter(default_state), F.video | F.document)
-async def draft_video(m: Message):
-    """Mini App'da ma'lumot kiritilgan bo'lsa — yuborilgan video shu kinoga biriktiriladi."""
+async def draft_video(m: Message, bot: Bot):
+    """1) Mini App'da ma'lumot kiritilgan bo'lsa — yuborilgan video shu kinoga biriktiriladi.
+    2) Aks holda kanaldan forward qilingan kino «kutilmoqda» ga qo'shiladi."""
     draft = await db.get_draft(m.from_user.id)
     if not draft:
+        origin = m.forward_origin
+        if isinstance(origin, MessageOriginChannel):
+            media, ftype = autoload.media_of(m)
+            if not media:
+                await m.answer("ℹ️ Bu fayl kino emas (video yoki video-fayl yuboring).")
+                return
+            await autoload.import_media(
+                bot, media, ftype, m.caption, origin.chat.id, origin.message_id,
+                autoload.link_for(origin.chat, origin.message_id),
+            )
+            return
         await m.answer(
             "ℹ️ Kino qo'shish uchun avval katalogdagi ⚙️ <b>Admin</b> bo'limida ma'lumotlarni kiriting, "
-            "yoki /admin → «🎬 Kino qo'shish» ni bosing."
+            "yoki /admin → «🎬 Kino qo'shish» ni bosing.\n\n"
+            "📥 Kanaldagi kinolarni qo'shish uchun postlarni shu yerga <b>forward</b> qiling."
         )
         return
     media = m.video or m.document
@@ -371,6 +388,39 @@ async def cb_list(c: CallbackQuery):
     await c.message.edit_text(text[:4000], reply_markup=kb.back_admin_kb())
 
 
+# ───────────── Kutilayotgan kinolar (kanaldan kelganlar) ─────────────
+@router.callback_query(F.data == "adm:pend")
+async def cb_pending(c: CallbackQuery):
+    rows = await db.pending_movies()
+    if not rows:
+        text = ("⏳ <b>Kutilayotgan kino yo'q.</b>\n\n"
+                "Avto-yuklash kanaliga kino tashlang yoki kanal postlarini shu botga <b>forward</b> qiling.")
+        markup = kb.back_admin_kb()
+    else:
+        lines = [f"<code>{r['id']}</code> — {html.escape(r['title'])}" + (f" ({r['year']})" if r["year"] else "")
+                 + (f" • {html.escape(r['genre'])}" if r["genre"] else "") for r in rows[:40]]
+        more = f"\n…va yana {len(rows) - 40} ta" if len(rows) > 40 else ""
+        text = (f"⏳ <b>Kutilayotgan kinolar: {len(rows)}</b>\n<i>Foydalanuvchilar hali ko'rmaydi.</i>\n\n"
+                + "\n".join(lines) + more)
+        markup = kb.pending_kb()
+    await c.answer()
+    try:
+        await c.message.edit_text(text[:4000], reply_markup=markup)
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("adm:pubok:"))
+async def cb_publish(c: CallbackQuery, bot: Bot):
+    notify = c.data.split(":")[2] == "1"
+    n = await broadcast.publish_all(bot, notify)
+    if not n:
+        return await c.answer("Kutilayotgan kino yo'q", show_alert=True)
+    await c.answer("🚀 Chiqarildi!")
+    extra = "\n📣 Foydalanuvchilarga xabar yuborilmoqda, tugagach hisobot keladi." if notify else ""
+    await c.message.edit_text(f"✅ <b>{n} ta kino chiqarildi!</b>{extra}", reply_markup=kb.back_admin_kb())
+
+
 # ───────────── Kanallar: majburiy obuna va avto-yuklash manbalari ─────────────
 def _parse_chat_ref(m: Message):
     if isinstance(m.forward_origin, MessageOriginChannel):
@@ -388,8 +438,9 @@ async def channels_text() -> tuple[str, list]:
 
 SOURCE_HELP = (
     "📥 <b>Avto-yuklash kanallari</b>\n\n"
-    "Shu kanallarga tashlangan kino (video/fayl) bot tomonidan <b>avtomatik</b> bazaga qo'shiladi "
-    "va foydalanuvchilarga tarqatiladi.\n\n"
+    "Shu kanallarga tashlangan kino (video/fayl) bot tomonidan <b>avtomatik</b> o'qiladi va "
+    "<b>«⏳ Kutilayotganlar»</b> ga tushadi. Tayyor bo'lgach bitta tugma bilan hammasini chiqarasiz.\n"
+    "Kanalda oldindan turgan kinolar uchun postlarni botga <b>forward</b> qiling.\n\n"
     "📝 <b>Post izohi (caption) shunday bo'lsin:</b>\n"
     "<code>Qasoskor\nYili: 2023\nJanri: Jangari, Drama\nDavlati: AQSH\nTili: O'zbek tilida</code>\n"
     "<i>Faqat birinchi qator (nom) shart, qolganlari ixtiyoriy.</i>\n\n"
@@ -518,15 +569,13 @@ async def ban_do(m: Message, state: FSMContext):
 async def settings_markup():
     protect = await db.get_setting("protect_content", "0") == "1"
     sub = await db.get_setting("sub_required", "1") == "1"
-    auto = await db.get_setting("auto_post", "1") == "1"
-    return kb.settings_kb(protect, sub, auto)
+    return kb.settings_kb(protect, sub)
 
 
 SETTINGS_TEXT = (
     "⚙️ <b>Sozlamalar</b>\n\n"
     "🔒 <b>Kontentni himoyalash</b> — yoqilsa, kinoni forward qilish va saqlab olish taqiqlanadi.\n"
-    "📢 <b>Majburiy obuna</b> — o'chirilsa, kanallar tekshirilmaydi.\n"
-    "📣 <b>Avto-tarqatish</b> — kanaldan yangi kino qo'shilganda hamma foydalanuvchiga e'lon yuboriladi."
+    "📢 <b>Majburiy obuna</b> — o'chirilsa, kanallar tekshirilmaydi."
 )
 
 

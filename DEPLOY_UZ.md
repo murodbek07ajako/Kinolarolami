@@ -56,15 +56,22 @@ Render har safar GitHub'ga yangi fayl yuklanganda botni qayta ishga tushiradi va
 Admin bo'lsangiz katalog tepasida **⚙️** tugmasi chiqadi:
 - 📊 Statistika — foydalanuvchilar, ko'rishlar, top kinolar
 - 🎬 Qo'shish — ma'lumotlarni to'ldirib «Saqlash» bosasiz, bot videoni so'raydi, yuborasiz
-- 📋 Kinolar — qidirish va o'chirish
-- ⚙️ Sozlama — himoya, majburiy obuna, avto-tarqatish, kanallar
+- 📋 Kinolar — ⏳ kutilayotganlar + «Hammasini chiqarish», qidirish, o'chirish
+- ⚙️ Sozlama — himoya, majburiy obuna, kanallar
 
-## Kanaldan avto-yuklash (keyingi qadam)
-`/admin` → «📥 Avto-yuklash kanali» orqali kanalni ulang (bot kanalda admin bo'lsin). Kanalga video tashlab, izohiga yozing:
+## Kanaldan avto-yuklash
+1. `/admin` → «📥 Avto-yuklash kanali» orqali kanalingizni ulang (bot kanalda **admin** bo'lsin).
+2. Kanalga video tashlab, izohiga yozing:
 ```
 Qasoskor
 Yili: 2023
 Janri: Jangari, Drama
 Davlati: AQSH
 ```
-Bot o'zi qo'shadi, posterni videoning Telegramdagi kadridan oladi va hammaga tarqatadi. Poster yoqmasa: `/poster KOD` va rasm yuboring.
+3. Bot postni o'zi o'qiydi va **«kutilmoqda»** holatida saqlaydi — foydalanuvchilar hali KO'RMAYDI. Sizga "⏳ Kutilmoqda: +N ta kino" xabari keladi.
+4. **Kanalda oldindan turgan kinolar**: kanaldagi postlarni botning o'ziga *forward* qiling (bir nechtasini belgilab birdan). Bot ularni ham o'qiydi, takrorlarini o'tkazib yuboradi.
+5. Hammasi tayyor bo'lgach: `/admin` → «⏳ Kutilayotganlar» yoki katalogdagi ⚙️ → 📋 Kinolar → **«Hammasini chiqarish»**. Kinolar katalogga chiqadi va foydalanuvchilarga **bitta umumiy xabar** ketadi («Xabarsiz chiqarish» ham bor).
+6. Poster videoning Telegramdagi kadridan olinadi. Yoqmasa: `/poster KOD` yozib rasm yuboring.
+7. Post izohini kanalda tahrirlasangiz, bot ma'lumotni yangilaydi.
+
+⚠️ Yuklab bo'lgach zaxira nusxa oling — Render qayta ishga tushsa baza o'chadi (bot zaxirani o'zi ham yuborib turadi).

@@ -101,6 +101,59 @@ async def announce(bot: Bot, movie_id: int) -> None:
     )
 
 
+def announce_many_text(movies) -> str:
+    e = html.escape
+    lines = [f"🆕 <b>{len(movies)} ta yangi kino qo'shildi!</b>\n"]
+    for m in movies[:12]:
+        lines.append(
+            f"• <b>{e(m['title'])}</b>" + (f" ({e(m['year'])})" if m["year"] else "")
+            + (f" — {e(m['genre'])}" if m["genre"] else "")
+        )
+    if len(movies) > 12:
+        lines.append(f"…va yana {len(movies) - 12} ta")
+    lines.append("\n👇 Tomosha qilish uchun katalogni oching")
+    return "\n".join(lines)[:4000]
+
+
+async def announce_many(bot: Bot, movie_ids: list[int]) -> None:
+    """Bir nechta yangi kino haqida BITTA umumiy xabar yuboradi (bittasi bo'lsa — poster bilan oddiy e'lon)."""
+    movies = [m for m in [await db.get_movie(i) for i in movie_ids] if m]
+    if not movies:
+        return
+    if len(movies) == 1:
+        await announce(bot, movies[0]["id"])
+        return
+    text = announce_many_text(movies)
+    markup = kb.announce_many_kb()
+
+    async def send(uid: int) -> None:
+        await bot.send_message(uid, text, reply_markup=markup)
+
+    async with lock:
+        ok, blocked, failed, total = await run(bot, send)
+    await svc.notify_admins(
+        bot,
+        f"📣 <b>{len(movies)} ta kino</b> e'lon qilindi\n\n"
+        f"📨 Yetkazildi: <b>{ok}</b>\n😶 Bloklagan: <b>{blocked}</b>\n⚠️ Xatolik: <b>{failed}</b>\n👥 Jami: <b>{total}</b>",
+    )
+
+
+async def publish_all(bot: Bot, notify: bool) -> int:
+    """Kutilayotgan hamma kinoni chiqaradi. notify=True bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
+    ids = await db.publish_pending()
+    if ids and notify:
+        _announced.update(ids)
+
+        async def _job():
+            try:
+                await announce_many(bot, ids)
+            except Exception:
+                logging.exception("E'lon yuborishda xatolik")
+
+        spawn(_job())
+    return len(ids)
+
+
 def schedule_announce(bot: Bot, movie_id: int) -> bool:
     """Fonda tarqatishni boshlaydi. Shu kino allaqachon tarqatilgan bo'lsa False qaytaradi."""
     if movie_id in _announced:

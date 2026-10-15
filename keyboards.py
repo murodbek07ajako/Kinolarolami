@@ -72,7 +72,7 @@ def admin_kb() -> InlineKeyboardMarkup:
         [B(text="🗑 Kino o'chirish", callback_data="adm:del"), B(text="📋 Kinolar ro'yxati", callback_data="adm:list")],
         [B(text="📣 Xabar yuborish", callback_data="adm:bc"), B(text="📢 Majburiy obuna", callback_data="adm:ch")],
         [B(text="🚫 Ban / Unban", callback_data="adm:ban"), B(text="⚙️ Sozlamalar", callback_data="adm:set")],
-        [B(text="📥 Avto-yuklash kanali", callback_data="adm:src")],
+        [B(text="⏳ Kutilayotganlar", callback_data="adm:pend"), B(text="📥 Avto-yuklash kanali", callback_data="adm:src")],
         [B(text="💾 Zaxira nusxa", callback_data="adm:backup"), B(text="♻️ Tiklash", callback_data="adm:restore")],
     ])
 
@@ -130,14 +130,33 @@ def announce_kb(movie_id: int) -> InlineKeyboardMarkup:
     return _kb(rows)
 
 
-def settings_kb(protect: bool, sub_required: bool, auto_post: bool) -> InlineKeyboardMarkup:
+def announce_many_kb() -> InlineKeyboardMarkup:
+    """Bir nechta yangi kino e'loni tugmalari."""
+    rows = [[B(text="🆕 Yangi kinolar", callback_data="new")]]
+    w = webapp_button("🎞 Katalogni ochish")
+    if w:
+        rows.insert(0, [w])
+    return _kb(rows)
+
+
+def pending_kb() -> InlineKeyboardMarkup:
+    return _kb([
+        [B(text="🚀 Chiqarish + hammaga xabar", callback_data="adm:pubok:1")],
+        [B(text="🤫 Xabarsiz chiqarish", callback_data="adm:pubok:0")],
+        [B(text="⬅️ Admin panel", callback_data="adm:panel")],
+    ])
+
+
+def pending_notice_kb() -> InlineKeyboardMarkup:
+    return _kb([[B(text="⏳ Ko'rish va chiqarish", callback_data="adm:pend")]])
+
+
+def settings_kb(protect: bool, sub_required: bool) -> InlineKeyboardMarkup:
     return _kb([
         [B(text=f"{'✅' if protect else '❌'} Kontentni himoyalash (yuklash/forward taqiq)",
            callback_data="adm:tgl:protect_content")],
         [B(text=f"{'✅' if sub_required else '❌'} Majburiy obuna",
            callback_data="adm:tgl:sub_required")],
-        [B(text=f"{'✅' if auto_post else '❌'} Avto-tarqatish (kanaldan yangi kino kelganda hammaga xabar)",
-           callback_data="adm:tgl:auto_post")],
         [B(text="⬅️ Admin panel", callback_data="adm:panel")],
     ])
 

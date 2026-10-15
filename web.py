@@ -12,9 +12,10 @@ from aiohttp import web
 
 import config
 import db
+import broadcast
 import services as svc
 
-SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1", "auto_post": "1"}
+SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
 DRAFT_LIMITS = {"title": 120, "description": 800, "year": 4, "genre": 100, "country": 60, "language": 60, "quality": 20}
 
 
@@ -118,9 +119,9 @@ async def api_movies(request: web.Request):
 
 
 async def api_movie(request: web.Request):
-    _auth(request)
+    user = _auth(request)
     movie = await db.get_movie(int(request.match_info["id"]))
-    if not movie:
+    if not movie or (movie["status"] != "live" and user["id"] not in config.ADMIN_IDS):
         raise web.HTTPNotFound(reason="not found")
     d = _brief(movie)
     d["description"] = movie["description"]
@@ -229,6 +230,22 @@ async def api_admin_channel_del(request: web.Request):
     return web.json_response(await _settings_payload())
 
 
+async def api_admin_pending(request: web.Request):
+    _admin(request)
+    return web.json_response({"items": [
+        {"id": r["id"], "title": r["title"], "year": r["year"], "genre": r["genre"]}
+        for r in await db.pending_movies()
+    ]})
+
+
+async def api_admin_publish(request: web.Request):
+    """Kutilayotgan hamma kinoni chiqaradi; notify=true bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
+    _admin(request)
+    body = await request.json()
+    n = await broadcast.publish_all(request.app["bot"], bool(body.get("notify")))
+    return web.json_response({"published": n})
+
+
 async def api_admin_movie_del(request: web.Request):
     _admin(request)
     body = await request.json()
@@ -308,6 +325,8 @@ def make_app(bot) -> web.Application:
     r.add_post("/api/admin/setting", api_admin_setting)
     r.add_post("/api/admin/channel", api_admin_channel_add)
     r.add_post("/api/admin/channel/delete", api_admin_channel_del)
+    r.add_get("/api/admin/pending", api_admin_pending)
+    r.add_post("/api/admin/publish", api_admin_publish)
     r.add_post("/api/admin/movie/delete", api_admin_movie_del)
     r.add_get("/api/admin/draft", api_admin_draft_get)
     r.add_post("/api/admin/draft", api_admin_draft_save)
