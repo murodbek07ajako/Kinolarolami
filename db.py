@@ -1,4 +1,5 @@
 """SQLite bilan ishlash (aiosqlite)."""
+import asyncio
 import json
 import shutil
 import sqlite3
@@ -55,7 +56,17 @@ CREATE TABLE IF NOT EXISTS series(
   language TEXT NOT NULL DEFAULT '',
   poster_id TEXT NOT NULL DEFAULT '',
   search_text TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  num INTEGER
+);
+CREATE TABLE IF NOT EXISTS admins(
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT 'admin',
+  perms TEXT NOT NULL DEFAULT '',
+  sections TEXT NOT NULL DEFAULT '',
+  added_by INTEGER,
+  added_at INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS sources(
   chat_id INTEGER PRIMARY KEY,
@@ -108,6 +119,7 @@ async def init(path: str) -> None:
     await _db.execute("PRAGMA journal_mode=WAL")
     await _db.executescript(SCHEMA)
     await _migrate()
+    await _load_nums()
 
 
 async def _migrate() -> None:
@@ -126,6 +138,17 @@ async def _migrate() -> None:
         await _db.execute("ALTER TABLE sources ADD COLUMN kind TEXT NOT NULL DEFAULT 'kino'")
     if "series_id" not in scols:
         await _db.execute("ALTER TABLE sources ADD COLUMN series_id INTEGER")
+    sercols = {r["name"] for r in await _all("PRAGMA table_info(series)")}
+    if "num" not in sercols:
+        await _db.execute("ALTER TABLE series ADD COLUMN num INTEGER")
+    # Raqami yo'q seriallarga HAR TUR uchun alohida tartib raqami beriladi: s.1, s.2 / m.1 / a.1 ...
+    for kind in KIND_PREFIX:
+        rows = await _all("SELECT id FROM series WHERE kind=? AND (num IS NULL OR num=0) ORDER BY id", (kind,))
+        last = (await _one("SELECT COALESCE(MAX(num), 0) AS n FROM series WHERE kind=?", (kind,)))["n"]
+        for r in rows:
+            last += 1
+            await _db.execute("UPDATE series SET num=? WHERE id=?", (last, r["id"]))
+    await _db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_series_num ON series(kind, num)")
     await _db.execute("CREATE INDEX IF NOT EXISTS idx_movies_series ON movies(series_id)")
     await _db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_ep ON movies(series_id, ep) WHERE series_id IS NOT NULL"
@@ -337,25 +360,50 @@ PREFIX_KIND = {v: k for k, v in KIND_PREFIX.items()}
 KINDS = ("kino", "multfilm", "serial", "anime")
 
 
+# Har tur o'z raqamini alohida sanaydi (s.1, s.2 | m.1 | a.1). Ichki id (series.id) esa umumiy.
+_NUM: dict[int, int] = {}                 # series.id -> turdagi tartib raqami
+_BYNUM: dict[tuple[str, int], int] = {}   # (tur, raqam) -> series.id
+_series_lock = asyncio.Lock()
+
+
+async def _load_nums() -> None:
+    _NUM.clear()
+    _BYNUM.clear()
+    for r in await _all("SELECT id, kind, num FROM series"):
+        if r["num"]:
+            _NUM[r["id"]] = r["num"]
+            _BYNUM[(r["kind"], r["num"])] = r["id"]
+
+
 def series_code(kind: str, sid: int) -> str:
-    return f"{KIND_PREFIX.get(kind, 's')}.{sid}"
+    return f"{KIND_PREFIX.get(kind, 's')}.{_NUM.get(sid, sid)}"
 
 
 def parse_series_code(text: str):
-    """'s.12' / 'M.3' -> (tur, id) yoki None."""
+    """'s.12' / 'M.3' -> (tur, series.id) yoki None. Shunday raqamli serial yo'q bo'lsa id=0 qaytadi (topilmadi)."""
     import re
     m = re.fullmatch(r"([sma])\s*\.\s*(\d+)", (text or "").strip().lower())
-    return (PREFIX_KIND[m.group(1)], int(m.group(2))) if m else None
+    if not m:
+        return None
+    kind = PREFIX_KIND[m.group(1)]
+    return kind, _BYNUM.get((kind, int(m.group(2))), 0)
 
 
 async def add_series(d: dict) -> int:
     search, genre_lc = _derive(d)
-    return await _run(
-        """INSERT INTO series(kind, title, description, year, genre, genre_lc, country, language,
-                              poster_id, search_text, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-        (d.get("kind", "serial"), d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""),
-         genre_lc, d.get("country", ""), d.get("language", ""), d.get("poster", ""), search, int(time.time())),
-    )
+    kind = d.get("kind", "serial")
+    async with _series_lock:
+        num = (await _one("SELECT COALESCE(MAX(num), 0) + 1 AS n FROM series WHERE kind=?", (kind,)))["n"]
+        sid = await _run(
+            """INSERT INTO series(kind, title, description, year, genre, genre_lc, country, language,
+                                  poster_id, search_text, created_at, num) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (kind, d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""),
+             genre_lc, d.get("country", ""), d.get("language", ""), d.get("poster", ""), search,
+             int(time.time()), num),
+        )
+        _NUM[sid] = num
+        _BYNUM[(kind, num)] = sid
+    return sid
 
 
 async def get_series(sid: int):
@@ -399,6 +447,10 @@ async def delete_series(sid: int) -> None:
     await _db.execute("DELETE FROM sources WHERE series_id=?", (sid,))
     await _db.execute("DELETE FROM series WHERE id=?", (sid,))
     await _db.commit()
+    for key, val in list(_BYNUM.items()):
+        if val == sid:
+            del _BYNUM[key]
+    _NUM.pop(sid, None)
 
 
 async def episodes(sid: int, live_only: bool = True):
@@ -674,6 +726,36 @@ async def get_draft(admin_id: int) -> dict | None:
 
 async def clear_draft(admin_id: int) -> None:
     await _run("DELETE FROM drafts WHERE admin_id=?", (admin_id,))
+
+
+# ───────────── Adminlar ─────────────
+async def list_admins():
+    return await _all("SELECT * FROM admins ORDER BY added_at, id")
+
+
+async def get_admin(aid: int):
+    return await _one("SELECT * FROM admins WHERE id=?", (aid,))
+
+
+async def save_admin(aid: int, name: str, role: str, perms: str, sections: str, added_by: int | None) -> None:
+    await _run(
+        """INSERT INTO admins(id, name, role, perms, sections, added_by, added_at) VALUES(?,?,?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role,
+             perms=excluded.perms, sections=excluded.sections""",
+        (aid, name, role, perms, sections, added_by, int(time.time())),
+    )
+
+
+async def del_admin(aid: int) -> None:
+    await _run("DELETE FROM admins WHERE id=?", (aid,))
+
+
+async def user_name(uid: int) -> str:
+    """Foydalanuvchining bazadagi ismi (botga kirgan bo'lsa)."""
+    row = await _one("SELECT full_name, username FROM users WHERE id=?", (uid,))
+    if not row:
+        return ""
+    return (row["full_name"] or "").strip() or (f"@{row['username']}" if row["username"] else "")
 
 
 # ───────────── Sozlamalar ─────────────

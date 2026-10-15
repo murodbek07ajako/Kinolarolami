@@ -284,6 +284,9 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     return c;
   }
 
+  const KIND_PL = { kino: 'kinolar', multfilm: 'multfilmlar', serial: 'seriallar', anime: 'animelar' };
+  const KIND_SG = { kino: 'Kino', multfilm: 'Multfilm', serial: 'Serial', anime: 'Anime' };
+  const KIND_ICON = { kino: '🎬', multfilm: '🧸', serial: '📺', anime: '🎌' };
   const grid = $('#grid');
   function skeleton() { for (let i = 0; i < 6; i++) grid.appendChild(el('div', 'sk')); }
   function clearSkeleton() { grid.querySelectorAll('.sk').forEach(n => n.remove()); }
@@ -292,7 +295,11 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     const e = $('#empty'); e.replaceChildren(); e.hidden = false;
     let icon = '🔍', title = 'Hech narsa topilmadi', text = 'Boshqa so\'z yoki janrni sinab ko\'ring.';
     if (S.sort === 'fav' && !S.q && !S.genre) { icon = '⭐'; title = 'Saralanganlar bo\'sh'; text = 'Kino sahifasidagi 🤍 tugmasini bosib saqlang.'; }
-    else if (!S.q && !S.genre && S.sort !== 'fav') { icon = '🎬'; title = 'Hozircha kinolar yo\'q'; text = 'Tez orada yangi kinolar qo\'shiladi.'; }
+    else if (!S.q && !S.genre && S.sort !== 'fav') {
+      if (KIND_PL[S.kind]) { icon = KIND_ICON[S.kind]; title = 'Hozircha ' + KIND_PL[S.kind] + ' yo\'q'; text = 'Tez orada yangi ' + KIND_PL[S.kind] + ' qo\'shiladi.'; }
+      else { icon = '🎬'; title = 'Hozircha kontent yo\'q'; text = 'Tez orada yangi kinolar qo\'shiladi.'; }
+    }
+    else if (KIND_SG[S.kind]) { icon = KIND_ICON[S.kind]; title = KIND_SG[S.kind] + ' topilmadi'; text = 'Boshqa so\'z yoki janrni sinab ko\'ring.'; }
     e.appendChild(el('div', 'e', icon)); e.appendChild(el('b', null, title)); e.appendChild(document.createTextNode(text));
   }
 
@@ -475,6 +482,19 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   /* ═════════════ ADMIN PANEL ═════════════ */
   const adm = $('#adm'), admBody = $('#admBody');
   let admOpen = false, admTab = 'stats', admGen = 0;
+  let ME = { admin: false, full: false, manage: false, perms: [], sections: [] };
+  const can = p => ME.full || ME.perms.includes(p);
+  const TAB_NEED = { stats: ['stats'], add: ['add'], movies: ['add', 'delete', 'publish'], auto: ['channels', 'publish'], settings: ['settings', 'channels', 'broadcast', 'manage'] };
+  function applyTabs() {
+    let first = null;
+    document.querySelectorAll('#admTabs button').forEach(b => {
+      const ok = (TAB_NEED[b.dataset.tab] || []).some(p => p === 'manage' ? ME.manage : can(p));
+      b.hidden = !ok; b.style.display = ok ? '' : 'none';
+      if (ok && !first) first = b.dataset.tab;
+    });
+    const cur = (TAB_NEED[admTab] || []).some(p => p === 'manage' ? ME.manage : can(p));
+    if (!cur && first) admTab = first;
+  }
 
   const mkBtn = (cls, text, onclick) => { const b = el('button', cls, text); b.onclick = onclick; return b; };
   const loaderBox = () => el('div', 'loader', '⏳ Yuklanmoqda...');
@@ -753,7 +773,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
         d.items.forEach(m => list.appendChild(movieRow(m)));
         offset += d.items.length;
         more.hidden = offset >= total;
-        if (!total) { list.replaceChildren(el('div', 'note', q ? 'Hech narsa topilmadi.' : 'Hozircha kinolar yo\'q.')); }
+        if (!total) { list.replaceChildren(el('div', 'note', q ? 'Hech narsa topilmadi.' : 'Hozircha kontent yo\'q.')); }
       } catch (e) { toast(errMsg(e)); }
     }
     function editView(m) {
@@ -993,7 +1013,8 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 
   /* ───── 4) Sozlamalar ───── */
   TABS.settings = async () => {
-    const s = await api('/api/admin/settings');
+    const s = (can('settings') || can('channels')) ? await api('/api/admin/settings')
+      : { protect_content: false, sub_required: true, channels: [], sources: [] };
     const wrap = el('div');
 
     const general = el('div', 'panel');
@@ -1013,7 +1034,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     };
     toggle('🔒', 'Kontentni himoyalash', 'Forward va saqlashni taqiqlash', 'protect_content');
     toggle('📢', 'Majburiy obuna', 'Kanallarga obuna bo\'lmaguncha kino yuborilmaydi', 'sub_required');
-    wrap.appendChild(general);
+    if (can('settings')) wrap.appendChild(general);
 
     const chanPanel = (title, note, kind, list) => {
       const p = el('div', 'panel');
@@ -1042,11 +1063,130 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       add.append(i, b); p.appendChild(add);
       return p;
     };
-    wrap.appendChild(chanPanel('📢 Majburiy obuna kanallari', 'Foydalanuvchi shu kanallarga obuna bo\'lmaguncha kino ko\'ra olmaydi. Avval botni kanalga admin qiling.', 'sub', s.channels));
+    if (can('channels')) wrap.appendChild(chanPanel('📢 Majburiy obuna kanallari', 'Foydalanuvchi shu kanallarga obuna bo\'lmaguncha kino ko\'ra olmaydi. Avval botni kanalga admin qiling.', 'sub', s.channels));
     const hint = el('div', 'note'); hint.textContent = '📥 Avto-yuklash kanallari endi «📥 Avto» bo\'limida.';
-    wrap.appendChild(hint);
+    if (can('channels')) wrap.appendChild(hint);
+    if (can('broadcast')) wrap.appendChild(broadcastPanel());
+    if (ME.manage) wrap.appendChild(await adminsPanel());
     return wrap;
   };
+
+  /* ───── Hammaga xabar: matn + rasm yoki video ───── */
+  function broadcastPanel() {
+    const p = el('div', 'panel');
+    p.appendChild(el('h3', null, '📣 Hammaga xabar'));
+    p.appendChild(el('div', 'note', 'Matn yozing, xohlasangiz rasm yoki video qo\'shing. Xabar avval sizga, keyin barcha foydalanuvchilarga yuboriladi.'));
+    const ta = el('textarea', 'inp'); ta.placeholder = 'Xabar matni...'; ta.maxLength = 3500; ta.style.marginTop = '10px';
+    const file = el('input'); file.type = 'file'; file.accept = 'image/*,video/*'; file.hidden = true;
+    const info = el('div', 'sm'); info.style.margin = '6px 0 0';
+    const pickBtn = mkBtn('btn2', '📎 Rasm yoki video tanlash', () => file.click());
+    file.onchange = () => {
+      const f = file.files[0];
+      if (f && f.size > 49 * 1048576) { toast('Fayl 49 MB dan katta bo\'lmasligi kerak', 3200); file.value = ''; info.textContent = ''; return; }
+      info.textContent = f ? '📎 ' + f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)' : '';
+    };
+    const send = mkBtn('btn main', '📤 Yuborish', async () => {
+      const f = file.files[0], text = ta.value.trim();
+      if (!text && !f) { toast('Matn yozing yoki rasm/video tanlang'); return; }
+      if (!await confirmDlg('Xabar hamma foydalanuvchiga yuborilsinmi?')) return;
+      const fd = new FormData(); fd.append('text', text); if (f) fd.append('file', f, f.name);
+      send.disabled = true; send.textContent = '⏳ Yuklanmoqda...';
+      try {
+        const r = await fetch('/api/admin/broadcast', { method: 'POST', headers: { 'X-Init-Data': initData }, body: fd });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { const e = new Error(d.error || 'http ' + r.status); e.msg = d.error || ''; throw e; }
+        haptic('medium'); toast('✅ Yuborish boshlandi (' + d.total + ' kishi). Hisobot botga keladi.', 4200);
+        ta.value = ''; file.value = ''; info.textContent = '';
+      } catch (e) { toast(errMsg(e), 4200); }
+      finally { send.disabled = false; send.textContent = '📤 Yuborish'; }
+    });
+    send.style.marginTop = '10px';
+    p.append(ta, file, pickBtn, info, send);
+    return p;
+  }
+
+  /* ───── Adminlar: qo'shish, huquq belgilash, ro'yxat ───── */
+  async function adminsPanel() {
+    const box = el('div', 'panel');
+    let edit;
+    const render = d => {
+      box.replaceChildren(el('h3', null, '👥 Adminlar'));
+      box.appendChild(el('div', 'note', 'Admin qo\'shing va nimaga ruxsat berilishini belgilang. Ro\'yxatdagi adminni bosib huquqini o\'zgartirasiz.'));
+      d.admins.forEach(a => {
+        const r = el('div', 'row');
+        const g = el('div', 'grow');
+        g.appendChild(el('div', 'nm', a.name));
+        g.appendChild(el('div', 'sm', a.label + ' · ID ' + a.id));
+        const inf = el('div', 'sm', a.info); inf.style.whiteSpace = 'normal'; g.appendChild(inf);
+        r.appendChild(g);
+        if (a.editable) { r.style.cursor = 'pointer'; r.appendChild(el('div', 'sm', '›')); r.onclick = () => { haptic(); edit(d, a); }; }
+        box.appendChild(r);
+      });
+      box.appendChild(mkBtn('btn2', '➕ Admin qo\'shish', () => { haptic(); edit(d, null); }));
+    };
+    edit = (d, a) => {
+      box.replaceChildren(el('h3', null, a ? '✏️ Adminni o\'zgartirish' : '➕ Yangi admin'));
+      const st = { role: a ? a.role : 'admin', perms: new Set(a ? a.perms : ['add']), sections: new Set(a ? a.sections : Object.keys(d.section_labels)) };
+      let idInp = null;
+      if (a) box.appendChild(el('div', 'nm', a.name + ' · ID ' + a.id));
+      else {
+        box.appendChild(el('div', 'note', 'Admin bo\'ladigan odamning Telegram ID raqamini yozing (u @userinfobot orqali bilib oladi). U avval botga /start bosgan bo\'lsin.'));
+        idInp = el('input', 'inp'); idInp.type = 'number'; idInp.inputMode = 'numeric';
+        idInp.placeholder = 'Telegram ID, masalan 123456789'; idInp.style.marginTop = '10px';
+        box.appendChild(idInp);
+      }
+      const roleRow = el('div', 'chips'); roleRow.style.marginTop = '12px';
+      const body = el('div');
+      const roles = [['admin', '👤 Admin (belgilangan huquqlar)']];
+      if (d.can_senior) roles.push(['senior', '⭐ Starshiy admin (hamma huquq)']);
+      const drawBody = () => {
+        body.replaceChildren();
+        if (st.role === 'senior') { body.appendChild(el('div', 'note', 'Starshiy admin hamma narsani qila oladi va oddiy adminlarni qo\'shib-o\'chiradi.')); return; }
+        body.appendChild(el('div', 'note', 'Nimaga ruxsat berasiz:'));
+        Object.entries(d.perm_labels).forEach(([k, label]) => {
+          const r = el('div', 'row'); const g = el('div', 'grow');
+          const nm = el('div', 'nm', label); nm.style.whiteSpace = 'normal'; g.appendChild(nm);
+          const sw = el('button', 'sw' + (st.perms.has(k) ? ' on' : ''));
+          sw.onclick = () => { haptic(); st.perms.has(k) ? st.perms.delete(k) : st.perms.add(k); sw.classList.toggle('on'); };
+          r.append(g, sw); body.appendChild(r);
+        });
+        body.appendChild(el('div', 'note', 'Qaysi bo\'limlarga qaraydi:'));
+        const chips = el('div', 'chips');
+        Object.entries(d.section_labels).forEach(([k, label]) => {
+          const b = mkBtn(st.sections.has(k) ? 'on' : '', label, () => { haptic(); st.sections.has(k) ? st.sections.delete(k) : st.sections.add(k); b.classList.toggle('on'); });
+          chips.appendChild(b);
+        });
+        body.appendChild(chips);
+      };
+      const drawRole = () => {
+        roleRow.replaceChildren();
+        roles.forEach(([v, label]) => roleRow.appendChild(mkBtn(st.role === v ? 'on' : '', label, () => { st.role = v; drawRole(); drawBody(); })));
+      };
+      drawRole(); drawBody();
+      if (roles.length > 1 || a) box.appendChild(roleRow);
+      box.appendChild(body);
+      const bar = el('div', 'two'); bar.style.marginTop = '14px';
+      const save = mkBtn('btn main', '💾 Saqlash', async () => {
+        const id = a ? a.id : (idInp.value || '').trim();
+        if (!id) { toast('Telegram ID ni yozing'); return; }
+        save.disabled = true;
+        try {
+          const r = await api('/api/admin/admin', { id, role: st.role, perms: [...st.perms], sections: [...st.sections] });
+          haptic('medium'); toast(r.notified === false ? 'Saqlandi. Unga xabar bormadi (u botga /start bosmagan)' : '✅ Saqlandi', 3400);
+          render(r);
+        } catch (e) { toast(errMsg(e), 3800); save.disabled = false; }
+      });
+      bar.append(save, mkBtn('btn2', 'Bekor qilish', () => render(d)));
+      box.appendChild(bar);
+      if (a) box.appendChild(mkBtn('btn2', '🗑 Adminlikdan olish', async () => {
+        if (!await confirmDlg('«' + a.name + '» adminlikdan olinsinmi?')) return;
+        try { const r = await api('/api/admin/admin/delete', { id: a.id }); toast('Olib tashlandi'); render(r); }
+        catch (e) { toast(errMsg(e), 3400); }
+      }));
+    };
+    render(await api('/api/admin/admins'));
+    return box;
+  }
 
   /* ───────── Boshlash ───────── */
   async function init() {
@@ -1058,7 +1198,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       const me = await api('/api/me');
       S.favs = new Set(me.favs);
       const hi = $('#hi'); hi.replaceChildren(document.createTextNode('Salom, '), el('b', null, me.name), document.createTextNode(' 👋'));
-      if (me.admin) $('#gear').hidden = false;
+      if (me.admin) { ME = Object.assign(ME, me); $('#gear').hidden = false; applyTabs(); }
     } catch (e) {}
     try {
       const q0 = (new URLSearchParams(location.search).get('q') || '').trim().slice(0, 80);

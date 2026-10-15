@@ -38,3 +38,16 @@ Telegram Mini App faqat `https://` manzilni qabul qiladi. Bot ichki serverni `PO
 
 ## Eslatma
 Faqat o'zingizda tarqatish huquqi bor kontentni joylang.
+
+## Yangi imkoniyatlar
+
+**Kodlar.** Har bo'lim o'z raqamini alohida sanaydi: `s.1, s.2` (serial), `m.1` (multfilm), `a.1` (anime).
+Eski bazadagi seriallar ishga tushganda avtomatik shu tartibda qayta raqamlanadi.
+
+**Adminlar** (Mini App → ⚙️ Sozlama → 👥 Adminlar):
+- 👑 *Bosh admin* — `.env` dagi `ADMIN_IDS`. Hamma huquq, o'chirib bo'lmaydi.
+- ⭐ *Starshiy admin* — hamma huquq, oddiy adminlarni qo'shadi/o'chiradi (uni faqat bosh admin tayinlaydi).
+- 👤 *Admin* — faqat belgilangan huquqlar (kino qo'shish, o'chirish, chiqarish, xabar, kanallar, ban, statistika, sozlamalar)
+  va faqat belgilangan bo'limlar (kino, serial, anime, multfilm).
+
+**Hammaga xabar** (⚙️ Sozlama → 📣): matn, rasm yoki video (video 49 MB gacha). Hisobot botga keladi.

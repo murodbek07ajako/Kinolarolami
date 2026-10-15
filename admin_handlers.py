@@ -5,7 +5,7 @@ import re
 import sqlite3
 import tempfile
 
-from aiogram import Bot, F, Router
+from aiogram import BaseMiddleware, Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -19,11 +19,89 @@ import caption_parser as cp
 import config
 import db
 import keyboards as kb
+import perms
 import services as svc
 
 router = Router()
-router.message.filter(F.from_user.id.in_(config.ADMIN_IDS))
-router.callback_query.filter(F.from_user.id.in_(config.ADMIN_IDS))
+
+
+def _staff(event) -> bool:
+    """Bosh admin, starshiy admin yoki bazaga qo'shilgan admin."""
+    u = event.from_user
+    return bool(u and perms.is_staff(u.id))
+
+
+router.message.filter(_staff)
+router.callback_query.filter(_staff)
+
+# Tugma (callback) → kerakli huquq. Birinchi mos kelgan qoida ishlaydi.
+CB_PERMS = [
+    ("adm:stats", "stats"), ("adm:push:", "add"), ("adm:add", "add"),
+    ("adm:delok:", "delete"), ("adm:del", "delete"), ("adm:list", ("add", "delete", "publish")),
+    ("adm:pend", "publish"), ("adm:pubok:", "publish"),
+    ("adm:chdel:", "channels"), ("adm:chadd", "channels"), ("adm:ch", "channels"),
+    ("adm:srcdel:", "channels"), ("adm:srcadd", "channels"), ("adm:src", "channels"),
+    ("adm:ban", "ban"), ("adm:tgl:", "settings"), ("adm:set", "settings"),
+    ("adm:backup", "backup"), ("adm:restore", "backup"),
+    ("adm:bcok", "broadcast"), ("adm:bc", "broadcast"),
+]
+# Holat (FSM) → kerakli huquq
+STATE_PERMS = {
+    "AddMovie:video": "add", "AddMovie:step": "add", "PosterSet:wait": "add", "DelMovie:code": "delete",
+    "AddChannel:wait": "channels", "BanUser:wait": "ban", "Broadcast:wait": "broadcast",
+    "Broadcast:confirm": "broadcast", "Restore:wait": "backup",
+}
+DENIED = "🚫 Sizda bu amal uchun ruxsat yo'q."
+
+
+def _allowed(uid: int, need) -> bool:
+    if need == "backup":
+        return perms.is_full(uid)  # zaxira/tiklash faqat bosh va starshiy adminlarga
+    if isinstance(need, tuple):
+        return perms.has_any(uid, *need)
+    return perms.has(uid, need)
+
+
+class PermMiddleware(BaseMiddleware):
+    """Har bir admin amalidan oldin huquqni tekshiradi."""
+
+    async def __call__(self, handler, event, data):
+        need = None
+        if isinstance(event, CallbackQuery):
+            d = event.data or ""
+            for prefix, p in CB_PERMS:
+                if d.startswith(prefix):
+                    need = p
+                    break
+        else:
+            st = data.get("raw_state") or ""
+            text = (event.text or "").strip().lower()
+            if st in STATE_PERMS:
+                need = STATE_PERMS[st]
+            elif text.startswith("/restore"):
+                need = "backup"
+            elif text.startswith("/poster"):
+                need = "add"
+            elif not st and (event.video or event.document or event.photo):
+                need = "add"
+        if need and not _allowed(event.from_user.id, need):
+            if isinstance(event, CallbackQuery):
+                await event.answer(DENIED, show_alert=True)
+            else:
+                await event.answer(DENIED)
+            return None
+        return await handler(event, data)
+
+
+router.message.middleware(PermMiddleware())
+router.callback_query.middleware(PermMiddleware())
+
+
+def _kind_denied(uid: int, kind: str) -> str:
+    """Bo'limga ruxsat bo'lmasa — xabar matni, bo'lsa — bo'sh qator."""
+    if perms.can_kind(uid, kind):
+        return ""
+    return f"🚫 Sizda «{svc.KIND_NAME.get(kind, kind)}» bo'limiga ruxsat yo'q."
 
 
 class AddMovie(StatesGroup):
@@ -153,6 +231,9 @@ async def cb_stats(c: CallbackQuery):
 # ───────────── Kino qo'shish (bot ichida, qadam-baqadam) ─────────────
 @router.callback_query(F.data == "adm:add")
 async def add_start(c: CallbackQuery, state: FSMContext):
+    deny = _kind_denied(c.from_user.id, "kino")
+    if deny:
+        return await c.answer(deny, show_alert=True)
     await state.clear()
     await state.set_state(AddMovie.video)
     await c.answer()
@@ -317,6 +398,11 @@ async def draft_video(m: Message, bot: Bot):
             country=ser["country"], language=ser["language"], kind=ser["kind"], series_id=ser["id"],
             ep=int(data["ep"]),
         )
+    deny = _kind_denied(m.from_user.id, data["kind"])
+    if deny:
+        await db.clear_draft(m.from_user.id)
+        await m.answer(deny)
+        return
     try:
         movie_id = await db.add_movie(data)
     except sqlite3.IntegrityError:
@@ -350,7 +436,10 @@ async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
     if code:
         ser = await db.get_series(code[1])
         if not ser or ser["kind"] != code[0]:
-            return await m.answer("❌ Bunday kodli serial topilmadi.")
+            return await m.answer(f"❌ Bunday kodli {svc.KIND_NAME.get(code[0], 'kontent')} topilmadi.")
+        deny = _kind_denied(m.from_user.id, ser["kind"])
+        if deny:
+            return await m.answer(deny)
         await state.set_state(PosterSet.wait)
         await state.update_data(series_id=ser["id"])
         return await m.answer(f"🖼 <b>{html.escape(ser['title'])}</b> uchun yangi poster (rasm) yuboring:",
@@ -360,6 +449,9 @@ async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
     movie = await db.get_movie(int(arg))
     if not movie:
         return await m.answer("❌ Bunday kodli kino topilmadi.")
+    deny = _kind_denied(m.from_user.id, movie["kind"])
+    if deny:
+        return await m.answer(deny)
     await state.set_state(PosterSet.wait)
     await state.update_data(movie_id=movie["id"])
     await m.answer(f"🖼 <b>{html.escape(movie['title'])}</b> uchun yangi poster (rasm) yuboring:",
@@ -409,6 +501,9 @@ async def del_code(m: Message, state: FSMContext):
     movie = await db.get_movie(int(m.text.strip()))
     if not movie:
         return await m.answer("❌ Bunday kodli kino topilmadi. Qayta yuboring:")
+    deny = _kind_denied(m.from_user.id, movie["kind"])
+    if deny:
+        return await m.answer(deny)
     await state.clear()
     await m.answer(
         f"❓ <b>{html.escape(movie['title'])}</b> (kod: <code>{movie['id']}</code>) o'chirilsinmi?",
@@ -418,6 +513,11 @@ async def del_code(m: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:delok:"))
 async def del_ok(c: CallbackQuery):
+    movie = await db.get_movie(int(c.data.split(":")[2]))
+    if movie:
+        deny = _kind_denied(c.from_user.id, movie["kind"])
+        if deny:
+            return await c.answer(deny, show_alert=True)
     await db.delete_movie(int(c.data.split(":")[2]))
     await c.answer("🗑 O'chirildi")
     await c.message.edit_text("🗑 Kino o'chirildi.", reply_markup=kb.back_admin_kb())
@@ -456,7 +556,7 @@ def pending_text(groups) -> str:
 
 @router.callback_query(F.data == "adm:pend")
 async def cb_pending(c: CallbackQuery):
-    groups = await db.pending_groups()
+    groups = [g for g in await db.pending_groups() if perms.can_kind(c.from_user.id, g["kind"])]
     if not groups:
         text = ("⏳ <b>Kutilayotgan kino yo'q.</b>\n\n"
                 "Avto-yuklash kanaliga kino tashlang yoki kanal postlarini shu botga <b>forward</b> qiling.")
@@ -473,7 +573,13 @@ async def cb_pending(c: CallbackQuery):
 @router.callback_query(F.data.startswith("adm:pubok:"))
 async def cb_publish(c: CallbackQuery, bot: Bot):
     notify = c.data.split(":")[2] == "1"
-    n = await broadcast.publish_all(bot, notify)
+    if perms.is_full(c.from_user.id):
+        n = await broadcast.publish_all(bot, notify)
+    else:  # cheklangan admin faqat o'z bo'limlaridagilarni chiqaradi
+        n = 0
+        for g in await db.pending_groups():
+            if perms.can_kind(c.from_user.id, g["kind"]):
+                n += await broadcast.publish_all(bot, notify, g["key"])
     if not n:
         return await c.answer("Kutilayotgan kino yo'q", show_alert=True)
     await c.answer("🚀 Chiqarildi!")
@@ -620,7 +726,7 @@ async def ban_do(m: Message, state: FSMContext):
     if not (m.text and m.text.strip().lstrip("-").isdigit()):
         return await m.answer("❗ Faqat ID raqam yuboring.")
     uid = int(m.text.strip())
-    if uid in config.ADMIN_IDS:
+    if perms.is_staff(uid):
         return await m.answer("😅 Adminni ban qilib bo'lmaydi.")
     banned = await db.is_banned(uid)
     await db.set_ban(uid, not banned)

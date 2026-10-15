@@ -14,6 +14,7 @@ import autoload
 import backup
 import config
 import db
+import perms
 import user_handlers as user
 import web
 
@@ -25,7 +26,7 @@ class TrackMiddleware(BaseMiddleware):
         u = data.get("event_from_user")
         if u and not u.is_bot:
             banned = await db.touch_user(u.id, u.full_name, u.username)
-            if banned and u.id not in config.ADMIN_IDS:
+            if banned and not perms.is_staff(u.id):
                 text = "🚫 Siz botdan foydalanishdan bloklangansiz."
                 if isinstance(event, Message):
                     await event.answer(text)
@@ -44,7 +45,7 @@ async def setup_bot(bot: Bot) -> None:
         BotCommand(command="favs", description="⭐ Saralanganlar"),
         BotCommand(command="help", description="ℹ️ Yordam"),
     ])
-    for admin_id in config.ADMIN_IDS:
+    for admin_id in perms.staff_ids():
         try:
             await bot.set_my_commands(
                 [BotCommand(command="admin", description="👨‍💻 Admin panel"),
@@ -76,6 +77,7 @@ async def main() -> None:
         logging.warning("Mini App o'chiq (WEBAPP_URL yo'q) — katalog tugmasi ko'rinmaydi.")
 
     await db.init(config.DB_PATH)
+    await perms.reload()
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
     dp.message.outer_middleware(TrackMiddleware())

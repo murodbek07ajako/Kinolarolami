@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 import config
 import db
 import keyboards as kb
+import perms
 
 SUB_TEXT = (
     "📢 <b>Botdan foydalanish uchun homiy kanallarga obuna bo'ling!</b>\n\n"
@@ -47,6 +48,9 @@ async def ask_subscribe(bot: Bot, chat_id: int, channels: list, movie_id: int = 
 
 
 KIND_EMOJI = {"kino": "🎬", "multfilm": "🧸", "serial": "📺", "anime": "🎌"}
+# Xabarlarda har bo'lim o'z nomi bilan ataladi (serial — «kino» emas)
+KIND_NAME = {"kino": "kino", "multfilm": "multfilm", "serial": "serial", "anime": "anime"}
+KIND_PLURAL = {"kino": "kinolar", "multfilm": "multfilmlar", "serial": "seriallar", "anime": "animelar"}
 
 
 def code_of(movie) -> str:
@@ -101,7 +105,7 @@ async def send_movie(bot: Bot, chat_id: int, user_id: int, movie) -> None:
 async def deliver(bot: Bot, chat_id: int, user_id: int, movie_id: int) -> str:
     """Kinoni yuboradi. Natija: 'ok' | 'sub' | 'nf' (topilmadi) | 'err' (yuborib bo'lmadi)."""
     movie = await db.get_movie(movie_id)
-    if not movie or (movie["status"] != "live" and user_id not in config.ADMIN_IDS):
+    if not movie or (movie["status"] != "live" and not perms.is_staff(user_id)):
         return "nf"
     bad = await unsubscribed(bot, user_id)
     if bad:
@@ -117,7 +121,7 @@ async def deliver(bot: Bot, chat_id: int, user_id: int, movie_id: int) -> str:
 
 # ───────────── Adminlarga xabar / kanallarni aniqlash ─────────────
 async def notify_admins(bot: Bot, text: str, reply_markup=None) -> None:
-    for admin_id in config.ADMIN_IDS:
+    for admin_id in perms.notify_ids():
         try:
             await bot.send_message(admin_id, text, reply_markup=reply_markup, disable_web_page_preview=True)
         except Exception as e:

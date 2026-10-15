@@ -9,10 +9,13 @@ import time
 from urllib.parse import parse_qsl
 
 from aiohttp import web
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import BufferedInputFile
 
 import config
 import db
 import broadcast
+import perms
 import services as svc
 
 SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
@@ -47,11 +50,27 @@ def _auth(request: web.Request) -> dict:
     return user
 
 
-def _admin(request: web.Request) -> dict:
-    """Faqat ADMIN_IDS dagilar uchun (initData imzosi tekshirilgan foydalanuvchi bo'yicha)."""
+def _admin(request: web.Request, *need: str) -> dict:
+    """Admin (bosh/starshiy/oddiy) uchun. `need` berilsa — shulardan kamida bittasi huquqda bo'lishi kerak."""
     user = _auth(request)
-    if user["id"] not in config.ADMIN_IDS:
+    if not perms.is_staff(user["id"]):
         raise web.HTTPForbidden(reason="admin")
+    if need and not perms.has_any(user["id"], *need):
+        raise web.HTTPForbidden(reason="Sizda bu amal uchun ruxsat yo'q")
+    return user
+
+
+def _kind_ok(user: dict, kind: str) -> None:
+    """Shu bo'limga (kino/serial/anime/multfilm) ruxsat bo'lmasa — 403."""
+    if not perms.can_kind(user["id"], kind):
+        raise web.HTTPForbidden(reason=f"Sizda «{svc.KIND_NAME.get(kind, kind)}» bo'limiga ruxsat yo'q")
+
+
+def _manager(request: web.Request) -> dict:
+    """Adminlarni boshqarish: faqat bosh va starshiy adminlar."""
+    user = _auth(request)
+    if not perms.can_manage(user["id"]):
+        raise web.HTTPForbidden(reason="Adminlarni faqat starshiy admin boshqara oladi")
     return user
 
 
@@ -103,7 +122,8 @@ async def api_me(request: web.Request):
     return web.json_response({
         "name": name,
         "favs": await db.fav_ids(user["id"]),
-        "admin": user["id"] in config.ADMIN_IDS,
+        "admin": perms.is_staff(user["id"]),
+        **perms.info(user["id"]),
     })
 
 
@@ -127,7 +147,7 @@ async def api_movies(request: web.Request):
 async def api_movie(request: web.Request):
     user = _auth(request)
     movie = await db.get_movie(int(request.match_info["id"]))
-    if not movie or (movie["status"] != "live" and user["id"] not in config.ADMIN_IDS):
+    if not movie or (movie["status"] != "live" and not perms.is_staff(user["id"])):
         raise web.HTTPNotFound(reason="not found")
     d = _brief(movie)
     d["description"] = movie["description"]
@@ -141,7 +161,7 @@ async def api_series(request: web.Request):
     ser = await db.get_series(int(request.match_info["id"]))
     if not ser:
         raise web.HTTPNotFound(reason="not found")
-    is_admin = user["id"] in config.ADMIN_IDS
+    is_admin = perms.is_staff(user["id"])
     eps = await db.episodes(ser["id"], live_only=not is_admin)
     if not eps:
         raise web.HTTPNotFound(reason="not found")
@@ -200,7 +220,7 @@ async def api_sposter(request: web.Request):
 
 # ───────────── Admin API ─────────────
 async def api_admin_stats(request: web.Request):
-    _admin(request)
+    _admin(request, "stats")
     s = await db.stats()
     s["top"] = [{"id": t["id"], "title": t["title"], "views": t["views"]} for t in s["top"]]
     return web.json_response(s)
@@ -224,12 +244,12 @@ async def _settings_payload() -> dict:
 
 
 async def api_admin_settings(request: web.Request):
-    _admin(request)
+    _admin(request, "settings", "channels")
     return web.json_response(await _settings_payload())
 
 
 async def api_admin_setting(request: web.Request):
-    _admin(request)
+    _admin(request, "settings")
     body = await request.json()
     key = body.get("key")
     if key not in SETTING_DEFAULTS:
@@ -240,7 +260,7 @@ async def api_admin_setting(request: web.Request):
 
 async def api_admin_channel_add(request: web.Request):
     """Majburiy obuna kanali qo'shish."""
-    _admin(request)
+    _admin(request, "channels")
     body = await request.json()
     ref = svc.parse_ref(str(body.get("ref", "")))
     if body.get("kind") != "sub" or ref is None:
@@ -256,12 +276,13 @@ async def api_admin_channel_add(request: web.Request):
 async def api_admin_source_add(request: web.Request):
     """Avto-yuklash kanalini ulaydi. kind: kino|multfilm|anime|serial; parts=true yoki serial → qismli
     (bunda serial ma'lumotlari shu yerda bir marta kiritiladi, qismlar kanaldan raqam bo'yicha olinadi)."""
-    _admin(request)
+    user = _admin(request, "channels")
     body = await request.json()
     ref = svc.parse_ref(str(body.get("ref", "")))
     kind = body.get("kind")
     if kind not in db.KINDS:
         return _bad("Turini tanlang")
+    _kind_ok(user, kind)
     if ref is None:
         return _bad("Kanalni @username yoki -100... ID ko'rinishida yozing")
     parts = bool(body.get("parts")) or kind == "serial"
@@ -287,7 +308,7 @@ async def api_admin_source_add(request: web.Request):
 
 
 async def api_admin_channel_del(request: web.Request):
-    _admin(request)
+    _admin(request, "channels")
     body = await request.json()
     kind, ident = body.get("kind"), int(body.get("id", 0))
     if kind == "sub":
@@ -301,9 +322,11 @@ async def api_admin_channel_del(request: web.Request):
 
 async def api_admin_pending(request: web.Request):
     """Qo'shishga tayyor kontent: guruhlar (kino/multfilm/anime ro'yxatlari va har serial alohida)."""
-    _admin(request)
+    user = _admin(request, "publish")
     groups = []
     for g in await db.pending_groups():
+        if not perms.can_kind(user["id"], g["kind"]):
+            continue
         ser = g["series"]
         groups.append({
             "key": g["key"], "kind": g["kind"], "count": len(g["rows"]),
@@ -318,28 +341,45 @@ async def api_admin_pending(request: web.Request):
 async def api_admin_publish(request: web.Request):
     """Kutilayotganlarni chiqaradi. scope: all | single | single:<tur> | s:<serial id>.
     notify=true bo'lsa foydalanuvchilarga bitta umumiy xabar ketadi."""
-    _admin(request)
+    user = _admin(request, "publish")
     body = await request.json()
+    bot, notify, scope = request.app["bot"], bool(body.get("notify")), str(body.get("scope") or "all")
     try:
-        n = await broadcast.publish_all(request.app["bot"], bool(body.get("notify")), str(body.get("scope") or "all"))
+        if perms.is_full(user["id"]):
+            n = await broadcast.publish_all(bot, notify, scope)
+        else:  # cheklangan admin faqat o'z bo'limlaridagilarni chiqaradi
+            keys = [g["key"] for g in await db.pending_groups() if perms.can_kind(user["id"], g["kind"])]
+            if scope == "all":
+                targets = keys
+            elif scope == "single":
+                targets = [k for k in keys if k.startswith("single:")]
+            elif scope in keys:
+                targets = [scope]
+            else:
+                return _bad("Bu bo'limga ruxsat yo'q yoki kutilayotgan yo'q")
+            n = 0
+            for k in targets:
+                n += await broadcast.publish_all(bot, notify, k)
     except ValueError:
         return _bad("Noto'g'ri doira")
     return web.json_response({"published": n})
 
 
 async def api_admin_movie_get(request: web.Request):
-    _admin(request)
+    user = _admin(request, "add")
     m = await db.get_movie(int(request.match_info["id"]))
     if not m:
         raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, m["kind"])
     return web.json_response({"movie": {"id": m["id"], **{k: m[k] or "" for k in db.META_FIELDS}}})
 
 
 async def api_admin_series_get(request: web.Request):
-    _admin(request)
+    user = _admin(request, "add")
     ser = await db.get_series(int(request.match_info["id"]))
     if not ser:
         raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, ser["kind"])
     eps = await db.episodes(ser["id"], live_only=False)
     return web.json_response({
         "series": {"id": ser["id"], "kind": ser["kind"], "code": db.series_code(ser["kind"], ser["id"]),
@@ -349,11 +389,13 @@ async def api_admin_series_get(request: web.Request):
 
 
 async def api_admin_series_update(request: web.Request):
-    _admin(request)
+    user = _admin(request, "add")
     body = await request.json()
     sid = int(body.get("id", 0))
-    if not await db.get_series(sid):
+    ser = await db.get_series(sid)
+    if not ser:
         raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, ser["kind"])
     try:
         d = _clean_meta(body)
     except ValueError as e:
@@ -363,31 +405,35 @@ async def api_admin_series_update(request: web.Request):
 
 
 async def api_admin_series_del(request: web.Request):
-    _admin(request)
+    user = _admin(request, "delete")
     body = await request.json()
     sid = int(body.get("id", 0))
-    if not await db.get_series(sid):
+    ser = await db.get_series(sid)
+    if not ser:
         raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, ser["kind"])
     await db.delete_series(sid)
     return web.json_response({"ok": True})
 
 
 async def api_admin_series_list(request: web.Request):
     """Qo'lda qism qo'shishda serial tanlash ro'yxati."""
-    _admin(request)
+    user = _admin(request, "add")
     return web.json_response({"items": [
         {"id": r["id"], "kind": r["kind"], "code": db.series_code(r["kind"], r["id"]), "title": r["title"],
          "eps": r["eps"], "last_ep": r["last_ep"] or 0}
-        for r in await db.list_series()
+        for r in await db.list_series() if perms.can_kind(user["id"], r["kind"])
     ]})
 
 
 async def api_admin_movie_update(request: web.Request):
-    _admin(request)
+    user = _admin(request, "add")
     body = await request.json()
     mid = int(body.get("id", 0))
-    if not await db.get_movie(mid):
+    mv = await db.get_movie(mid)
+    if not mv:
         raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, mv["kind"])
     try:
         d = _clean_meta(body)
     except ValueError as e:
@@ -397,11 +443,13 @@ async def api_admin_movie_update(request: web.Request):
 
 
 async def api_admin_movie_del(request: web.Request):
-    _admin(request)
+    user = _admin(request, "delete")
     body = await request.json()
     mid = int(body.get("id", 0))
-    if not await db.get_movie(mid):
+    mv = await db.get_movie(mid)
+    if not mv:
         raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, mv["kind"])
     await db.delete_movie(mid)
     return web.json_response({"ok": True})
 
@@ -421,11 +469,12 @@ def _clean_meta(body: dict) -> dict:
     return out
 
 
-async def _clean_draft(body: dict) -> dict:
+async def _clean_draft(body: dict, user: dict) -> dict:
     """Qo'lda qo'shish qoralamasi. Yakka kino/multfilm/anime yoki qismli kontentning bitta qismi."""
     kind = body.get("kind") or "kino"
     if kind not in db.KINDS:
         raise ValueError("Turini tanlang")
+    _kind_ok(user, kind)
     parts = bool(body.get("parts")) or kind == "serial"
     if not parts:
         out = _clean_meta(body)
@@ -442,6 +491,7 @@ async def _clean_draft(body: dict) -> dict:
         ser = await db.get_series(sid)
         if not ser:
             raise ValueError("Serial topilmadi")
+        _kind_ok(user, ser["kind"])
     else:  # yangi serial yaratiladi (qismi chiqmaguncha katalogda ko'rinmaydi)
         meta = _clean_meta(body)
         sid = await db.add_series({**meta, "kind": kind})
@@ -452,15 +502,15 @@ async def _clean_draft(body: dict) -> dict:
 
 
 async def api_admin_draft_get(request: web.Request):
-    user = _admin(request)
+    user = _admin(request, "add")
     return web.json_response({"draft": await db.get_draft(user["id"])})
 
 
 async def api_admin_draft_save(request: web.Request):
     """Mini App'da kiritilgan ma'lumotlarni saqlaydi va botda adminga «endi videoni yuboring» deb yozadi."""
-    user = _admin(request)
+    user = _admin(request, "add")
     try:
-        draft = await _clean_draft(await request.json())
+        draft = await _clean_draft(await request.json(), user)
     except ValueError as e:
         return _bad(str(e))
     await db.save_draft(user["id"], draft)
@@ -484,13 +534,172 @@ async def api_admin_draft_save(request: web.Request):
 
 
 async def api_admin_draft_clear(request: web.Request):
-    user = _admin(request)
+    user = _admin(request, "add")
     await db.clear_draft(user["id"])
     return web.json_response({"ok": True})
 
 
+# ───────────── Adminlarni boshqarish (Sozlamalar → Adminlar) ─────────────
+async def _name_of(bot, uid: int) -> str:
+    """Ismi: avval bazadan (botga kirgan bo'lsa), keyin Telegramdan, bo'lmasa ID."""
+    name = await db.user_name(uid)
+    if name:
+        return name
+    try:
+        chat = await bot.get_chat(uid)
+        name = (chat.full_name or "").strip() or (f"@{chat.username}" if chat.username else "")
+        if name:
+            return name
+    except Exception:
+        pass
+    return f"ID {uid}"
+
+
+async def _admins_payload(request: web.Request, viewer_id: int) -> dict:
+    bot, viewer = request.app["bot"], perms.role(viewer_id)
+    items = [{"id": oid, "name": await _name_of(bot, oid), "role": "owner", "label": perms.ROLE_LABEL["owner"],
+              "info": perms.summary("owner", [], []), "perms": [], "sections": [], "editable": False}
+             for oid in sorted(config.ADMIN_IDS)]
+    for a in await db.list_admins():
+        role = "senior" if a["role"] == "senior" else "admin"
+        pl = [p for p in (a["perms"] or "").split(",") if p in perms.PERMS]
+        sl = [x for x in (a["sections"] or "").split(",") if x in perms.SECTIONS]
+        items.append({
+            "id": a["id"], "name": a["name"] or f"ID {a['id']}", "role": role, "label": perms.ROLE_LABEL[role],
+            "info": perms.summary(role, pl, sl), "perms": pl, "sections": sl,
+            "editable": a["id"] != viewer_id and (viewer == "owner" or role == "admin"),
+        })
+    return {"admins": items, "perm_labels": perms.PERMS, "section_labels": perms.SECTIONS,
+            "can_senior": viewer == "owner"}
+
+
+async def api_admin_admins(request: web.Request):
+    user = _manager(request)
+    return web.json_response(await _admins_payload(request, user["id"]))
+
+
+async def api_admin_admin_save(request: web.Request):
+    user = _manager(request)
+    body = await request.json()
+    try:
+        aid = int(str(body.get("id", "")).strip())
+    except ValueError:
+        return _bad("Telegram ID raqamini kiriting (masalan: 123456789)")
+    if aid <= 0:
+        return _bad("ID noto'g'ri")
+    viewer = perms.role(user["id"])
+    if aid in config.ADMIN_IDS:
+        return _bad("Bu bosh admin — uni o'zgartirib bo'lmaydi")
+    if aid == user["id"]:
+        return _bad("O'zingizning huquqlaringizni o'zgartira olmaysiz")
+    role = "senior" if body.get("role") == "senior" else "admin"
+    old = await db.get_admin(aid)
+    if (role == "senior" or (old and old["role"] == "senior")) and viewer != "owner":
+        return _bad("Starshiy adminni faqat bosh admin tayinlaydi va o'zgartiradi")
+    plist = [p for p in perms.PERMS if p in (body.get("perms") or [])]
+    slist = [x for x in perms.SECTIONS if x in (body.get("sections") or [])]
+    if role == "admin":
+        if not plist:
+            return _bad("Kamida bitta huquq belgilang")
+        if set(plist) & {"add", "delete", "publish"} and not slist:
+            return _bad("Kamida bitta bo'lim belgilang (kino, serial, anime, multfilm)")
+    else:
+        plist, slist = [], []
+    bot = request.app["bot"]
+    name = (old["name"] if old and old["name"] else "") or await _name_of(bot, aid)
+    await db.save_admin(aid, name, role, ",".join(plist), ",".join(slist), user["id"])
+    await perms.reload()
+    notified = True
+    if not old:
+        text = (
+            "🎉 <b>Siz admin etib tayinlandingiz!</b>\n\n"
+            f"Turi: <b>{perms.ROLE_LABEL[role]}</b>\n"
+            f"{html.escape(perms.summary(role, plist, slist))}\n\n"
+            "Admin panelni ochish uchun /admin yozing yoki katalogdagi ⚙️ tugmasini bosing."
+        )
+        try:
+            await bot.send_message(aid, text)
+        except Exception:
+            notified = False
+    return web.json_response({"ok": True, "notified": notified, **await _admins_payload(request, user["id"])})
+
+
+async def api_admin_admin_del(request: web.Request):
+    user = _manager(request)
+    body = await request.json()
+    try:
+        aid = int(body.get("id", 0))
+    except (TypeError, ValueError):
+        return _bad("ID noto'g'ri")
+    if aid in config.ADMIN_IDS:
+        return _bad("Bosh adminni o'chirib bo'lmaydi")
+    if aid == user["id"]:
+        return _bad("O'zingizni o'chira olmaysiz")
+    old = await db.get_admin(aid)
+    if not old:
+        raise web.HTTPNotFound(reason="not found")
+    if old["role"] == "senior" and perms.role(user["id"]) != "owner":
+        return _bad("Starshiy adminni faqat bosh admin o'chiradi")
+    await db.del_admin(aid)
+    await perms.reload()
+    return web.json_response({"ok": True, **await _admins_payload(request, user["id"])})
+
+
+# ───────────── Hammaga xabar (matn / rasm / video) ─────────────
+MAX_VIDEO = 49 * 1024 * 1024   # Telegram bot yuklash chegarasi ~50 MB
+MAX_PHOTO = 10 * 1024 * 1024
+
+
+async def api_admin_broadcast(request: web.Request):
+    """Mini App'dan: matn + (ixtiyoriy) rasm yoki video. Avval adminning o'ziga yuboriladi, so'ng hammaga nusxalanadi."""
+    user = _admin(request, "broadcast")
+    text, media, fname, ctype = "", None, "media", ""
+    reader = await request.multipart()
+    async for part in reader:
+        if part.name == "text":
+            text = (await part.text()).strip()
+        elif part.name == "file" and part.filename:
+            fname, ctype = part.filename, (part.headers.get("Content-Type") or "").lower()
+            buf = bytearray()
+            while True:
+                chunk = await part.read_chunk(256 * 1024)
+                if not chunk:
+                    break
+                buf.extend(chunk)
+                if len(buf) > MAX_VIDEO:
+                    return _bad("Fayl 49 MB dan katta bo'lmasligi kerak")
+            media = bytes(buf) or None
+    if not text and not media:
+        return _bad("Matn yozing yoki rasm/video tanlang")
+    caption = html.escape(text)
+    bot = request.app["bot"]
+    try:
+        if media:
+            if len(caption) > 1024:
+                return _bad("Rasm/video izohi 1024 belgidan oshmasligi kerak")
+            file = BufferedInputFile(media, filename=fname)
+            if ctype.startswith("image/"):
+                if len(media) > MAX_PHOTO:
+                    return _bad("Rasm 10 MB dan katta bo'lmasligi kerak")
+                sent = await bot.send_photo(user["id"], file, caption=caption or None)
+            elif ctype.startswith("video/"):
+                sent = await bot.send_video(user["id"], file, caption=caption or None, supports_streaming=True)
+            else:
+                return _bad("Faqat rasm yoki video yuborish mumkin")
+        else:
+            if len(caption) > 4000:
+                return _bad("Matn 4000 belgidan oshmasligi kerak")
+            sent = await bot.send_message(user["id"], caption)
+    except TelegramAPIError as e:
+        logging.warning("Ommaviy xabar tayyorlanmadi: %s", e)
+        return _bad("Telegram xabarni qabul qilmadi. Avval botga /start yozganingizni tekshiring.")
+    total = len(await db.broadcast_ids())
+    broadcast.spawn(broadcast.copy_all(bot, user["id"], user["id"], sent.message_id))
+    return web.json_response({"ok": True, "total": total})
+
+
 def make_app(bot) -> web.Application:
-    app = web.Application(middlewares=[errors])
+    app = web.Application(middlewares=[errors], client_max_size=60 * 1024 * 1024)
     app["bot"] = bot
     r = app.router
     r.add_get("/", index)
@@ -522,6 +731,10 @@ def make_app(bot) -> web.Application:
     r.add_get("/api/admin/draft", api_admin_draft_get)
     r.add_post("/api/admin/draft", api_admin_draft_save)
     r.add_post("/api/admin/draft/clear", api_admin_draft_clear)
+    r.add_get("/api/admin/admins", api_admin_admins)
+    r.add_post("/api/admin/admin", api_admin_admin_save)
+    r.add_post("/api/admin/admin/delete", api_admin_admin_del)
+    r.add_post("/api/admin/broadcast", api_admin_broadcast)
     return app
 
 

@@ -260,8 +260,8 @@ async def on_text(m: Message, bot: Bot):
         eps = await db.episodes(ser["id"]) if ser and ser["kind"] == code[0] else []
         if not eps:
             await m.answer(
-                f"❌ <code>{html.escape(q)}</code> kodli kontent topilmadi.\n\n"
-                "Kodni tekshirib qayta yuboring yoki katalogdan qidiring.",
+                f"❌ <code>{html.escape(q)}</code> kodli {svc.KIND_NAME.get(code[0], 'kontent')} topilmadi.\n\n"
+                f"Kodni tekshirib qayta yuboring yoki katalogdan {svc.KIND_NAME.get(code[0], 'kontent')} qidiring.",
                 reply_markup=kb.open_catalog_kb(),
             )
             return

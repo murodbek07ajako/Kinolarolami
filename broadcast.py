@@ -196,3 +196,27 @@ def schedule_announce(bot: Bot, movie_id: int) -> bool:
 
     spawn(_job())
     return True
+
+
+async def copy_all(bot: Bot, admin_id: int, src_chat: int, src_msg: int) -> None:
+    """Berilgan xabarni (matn/rasm/video) barcha foydalanuvchilarga nusxalaydi va adminga hisobot yuboradi."""
+    async def send(uid: int) -> None:
+        await bot.copy_message(uid, src_chat, src_msg)
+
+    try:
+        async with lock:
+            ok, blocked, failed, total = await run(bot, send)
+        report = (
+            "✅ <b>Xabar yuborish tugadi</b>\n\n"
+            f"📨 Yetkazildi: <b>{ok}</b>\n"
+            f"😶 Botni bloklagan: <b>{blocked}</b>\n"
+            f"⚠️ Xatolik: <b>{failed}</b>\n"
+            f"👥 Jami: <b>{total}</b>"
+        )
+    except Exception:
+        logging.exception("Ommaviy xabar yuborishda xatolik")
+        report = "⚠️ Xabar yuborishda xatolik yuz berdi. Qayta urinib ko'ring."
+    try:
+        await bot.send_message(admin_id, report)
+    except Exception:
+        pass
