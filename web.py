@@ -16,7 +16,6 @@ import config
 import db
 import broadcast
 import perms
-import posters
 import services as svc
 
 SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
@@ -173,7 +172,10 @@ async def api_series(request: web.Request):
     eps = await db.episodes(ser["id"], live_only=not is_admin)
     if not eps:
         raise web.HTTPNotFound(reason="not found")
+    watched = await db.watched_episodes(user["id"], ser["id"])
     return web.json_response({
+        "last": watched[0]["mid"] if watched else None,
+        "seen": [w["mid"] for w in watched],
         "t": "s", "id": ser["id"], "fk": -ser["id"], "kind": ser["kind"],
         "code": db.series_code(ser["kind"], ser["id"]),
         "title": ser["title"], "year": ser["year"], "genre": ser["genre"], "country": ser["country"],
@@ -182,6 +184,24 @@ async def api_series(request: web.Request):
         "cv": _cv(ser["cover_id"]),
         "eps": [{"id": e["id"], "ep": e["ep"], "views": e["views"], "live": e["status"] == "live"} for e in eps],
     })
+
+
+async def api_hero(request: web.Request):
+    """Katalog tepasidagi slayder (5 ta)."""
+    _auth(request)
+    rows = await db.hero_items(5)
+    return web.json_response({"items": [_brief(r) for r in rows]})
+
+
+async def api_similar(request: web.Request):
+    """Kino oynasidagi «O'xshash kontent»."""
+    _auth(request)
+    t, iid = request.match_info["t"], int(request.match_info["id"])
+    src = await (db.get_series(iid) if t == "s" else db.get_movie(iid))
+    if not src:
+        raise web.HTTPNotFound(reason="not found")
+    rows = await db.similar_items(t, iid, src["kind"], src["genre"], src["year"], 8)
+    return web.json_response({"items": [_brief(r) for r in rows]})
 
 
 async def api_send(request: web.Request):
@@ -329,8 +349,6 @@ async def api_admin_source_add(request: web.Request):
         if old and old["series_id"] and await db.get_series(old["series_id"]):
             return _bad("Bu kanal allaqachon boshqa serialga ulangan. Avval uni olib tashlang.")
         sid = await db.add_series({**meta, "kind": kind})
-        if not meta.get("cover"):
-            posters.spawn_series(request.app["bot"], sid)
         await db.add_source(chat_id, title, kind, sid)
     else:
         await db.add_source(chat_id, title, kind, None)
@@ -538,8 +556,6 @@ async def _clean_draft(body: dict, user: dict) -> dict:
     else:  # yangi serial yaratiladi (qismi chiqmaguncha katalogda ko'rinmaydi)
         meta = _clean_meta(body)
         sid = await db.add_series({**meta, "kind": kind})
-        if not meta.get("cover"):
-            posters.spawn_series(request.app["bot"], sid)
         ser = await db.get_series(sid)
     if await db.episode_by_no(sid, ep):
         raise ValueError(f"{ep}-qism allaqachon bor")
@@ -791,6 +807,8 @@ def make_app(bot) -> web.Application:
     r.add_get(r"/api/sposter/{id:\d+}", api_sposter)
     r.add_get(r"/api/cover/{id:\d+}", api_cover)
     r.add_get(r"/api/scover/{id:\d+}", api_scover)
+    r.add_get("/api/hero", api_hero)
+    r.add_get(r"/api/similar/{t:[ms]}/{id:\d+}", api_similar)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)

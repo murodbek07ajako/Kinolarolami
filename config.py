@@ -22,7 +22,7 @@ BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_IDS: set[int] = {
     int(x) for x in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if x.lstrip("-").isdigit()
 }
-BOT_TITLE: str = os.getenv("BOT_TITLE", "Kino Olami").strip()
+BOT_TITLE: str = os.getenv("BOT_TITLE", "MEGA CINEMA").strip()
 PORT: int = int(os.getenv("PORT", "8080"))
 DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "data" / "bot.db"))
 

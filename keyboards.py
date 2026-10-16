@@ -11,7 +11,7 @@ def _kb(rows: list[list[B]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def webapp_button(text: str = "🎬 Katalog (Mini App)", query: str = "") -> B | None:
+def webapp_button(text: str = "🎬 MEGA CINEMA", query: str = "") -> B | None:
     """Katalogni ochuvchi tugma. query berilsa katalog qidiruvi shu matn bilan ochiladi (masalan s.1)."""
     if not config.WEBAPP_URL:
         return None

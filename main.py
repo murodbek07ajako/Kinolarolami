@@ -15,7 +15,6 @@ import backup
 import config
 import db
 import perms
-import posters
 import user_handlers as user
 import web
 
@@ -52,7 +51,6 @@ async def setup_bot(bot: Bot) -> None:
                 [BotCommand(command="admin", description="👨‍💻 Admin panel"),
                  BotCommand(command="start", description="🏠 Bosh menyu"),
                  BotCommand(command="poster", description="🖼 Poster o'zgartirish"),
-                 BotCommand(command="rasmlar", description="🔎 Muqovasizlarga rasm topish"),
                  BotCommand(command="cancel", description="❌ Bekor qilish")],
                 scope=BotCommandScopeChat(chat_id=admin_id),
             )
@@ -61,7 +59,7 @@ async def setup_bot(bot: Bot) -> None:
     if config.WEBAPP_URL:
         try:
             await bot.set_chat_menu_button(
-                menu_button=MenuButtonWebApp(text="🎬 Katalog", web_app=WebAppInfo(url=config.WEBAPP_URL))
+                menu_button=MenuButtonWebApp(text="🎬 MEGA CINEMA", web_app=WebAppInfo(url=config.WEBAPP_URL))
             )
         except Exception as e:
             logging.warning("Menyu tugmasini o'rnatib bo'lmadi: %s", e)
@@ -106,13 +104,10 @@ async def main() -> None:
             except Exception:
                 pass
     backup_task = asyncio.create_task(backup.periodic(bot))
-    # Ishga tushganda muqovasiz (logoli) kinolarga rasm qidiramiz — fonda, bot ishlashiga xalaqit bermaydi
-    cover_task = asyncio.create_task(posters.backfill(bot, notify=False))
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         backup_task.cancel()
-        cover_task.cancel()
         await runner.cleanup()
         await db.close()
         await bot.session.close()

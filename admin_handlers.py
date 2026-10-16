@@ -20,7 +20,6 @@ import config
 import db
 import keyboards as kb
 import perms
-import posters
 import services as svc
 
 router = Router()
@@ -81,7 +80,7 @@ class PermMiddleware(BaseMiddleware):
                 need = STATE_PERMS[st]
             elif text.startswith("/restore"):
                 need = "backup"
-            elif text.startswith("/poster") or text.startswith("/rasmlar"):
+            elif text.startswith("/poster"):
                 need = "add"
             elif not st and (event.video or event.document or event.photo):
                 need = "add"
@@ -348,8 +347,6 @@ async def finish_add(m: Message, state: FSMContext) -> None:
     if not data.get("quality"):
         data["quality"] = data.get("auto_quality", "")
     movie_id = await db.add_movie(data)
-    if not data.get("cover"):
-        posters.spawn_movie(m.bot, movie_id)
     await state.clear()
     await announce_saved(m, movie_id, data)
 
@@ -412,8 +409,6 @@ async def draft_video(m: Message, bot: Bot):
         await db.clear_draft(m.from_user.id)
         await m.answer(f"❌ {data.get('ep')}-qism allaqachon mavjud. Boshqa raqam bilan qaytadan boshlang.")
         return
-    if not data.get("series_id") and not data.get("cover"):
-        posters.spawn_movie(m.bot, movie_id)
     if data.get("series_id") and data.get("poster"):
         ser = await db.get_series(data["series_id"])
         if ser and not ser["poster_id"]:
@@ -461,16 +456,6 @@ async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
     await state.update_data(movie_id=movie["id"])
     await m.answer(f"🖼 <b>{html.escape(movie['title'])}</b> uchun yangi poster (rasm) yuboring:",
                    reply_markup=kb.cancel_kb())
-
-
-@router.message(Command("rasmlar"))
-async def cmd_rasmlar(m: Message, bot: Bot):
-    """Muqovasiz (logo chiqib turgan) hamma kino va seriallarga rasm qidirib qo'yadi."""
-    n = len(await db.movies_without_cover()) + len(await db.series_without_cover())
-    if not n:
-        return await m.answer("✅ Hamma kinoda muqova bor.")
-    await m.answer(f"🔎 {n} ta muqovasiz kontent topildi. Rasm qidirilmoqda — tugagach xabar beraman.")
-    broadcast.spawn(posters.backfill(bot))
 
 
 @router.message(PosterSet.wait, F.photo)

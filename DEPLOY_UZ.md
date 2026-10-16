@@ -24,8 +24,7 @@ Kerak: telefon, internet, Telegram. Kompyuter shart emas.
 4. **Environment Variables** bo'limida qo'shing:
    - `BOT_TOKEN` = @BotFather bergan token
    - `ADMIN_IDS` = sizning Telegram ID (@userinfobot dan)
-   - `TMDB_API_KEY` = themoviedb.org dagi bepul kalit (kino/serial/multfilm muqovasi uchun; anime uchun kerak emas)
-   - `BOT_TITLE` = bot nomi (masalan: Kino Olami)
+   - `BOT_TITLE` = bot nomi (masalan: MEGA CINEMA)
    - `PYTHON_VERSION` = `3.12.8`
 5. **Create Web Service** → 3–5 daqiqa kuting. «Bot ishga tushdi» yozuvi chiqsa tayyor.
 

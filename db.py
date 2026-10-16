@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS views(
   at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_views_at ON views(at);
+CREATE INDEX IF NOT EXISTS idx_views_user ON views(user_id, at);
 CREATE INDEX IF NOT EXISTS idx_movies_views ON movies(views DESC);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(last_active);
 """
@@ -358,32 +359,6 @@ async def set_series_cover(sid: int, cover_id: str) -> None:
     await _run("UPDATE series SET cover_id=? WHERE id=?", (cover_id or "", sid))
 
 
-async def set_cover_if_empty(mid: int, cover_id: str) -> bool:
-    """Avto-topilgan muqovani faqat admin o'zi hali rasm qo'ymagan bo'lsa saqlaydi."""
-    cur = await _db.execute("UPDATE movies SET cover_id=? WHERE id=? AND cover_id=''", (cover_id, mid))
-    await _db.commit()
-    n = cur.rowcount
-    await cur.close()
-    return n > 0
-
-
-async def set_series_cover_if_empty(sid: int, cover_id: str) -> bool:
-    cur = await _db.execute("UPDATE series SET cover_id=? WHERE id=? AND cover_id=''", (cover_id, sid))
-    await _db.commit()
-    n = cur.rowcount
-    await cur.close()
-    return n > 0
-
-
-async def movies_without_cover():
-    """Muqovasiz yakka kinolar (qismlar serial muqovasidan foydalanadi)."""
-    return await _all("SELECT id FROM movies WHERE cover_id='' AND series_id IS NULL ORDER BY id DESC")
-
-
-async def series_without_cover():
-    return await _all("SELECT id FROM series WHERE cover_id='' ORDER BY id DESC")
-
-
 async def set_poster(mid: int, poster_id: str) -> None:
     await _run("UPDATE movies SET poster_id=? WHERE id=?", (poster_id, mid))
 
@@ -595,6 +570,47 @@ async def search_items(q: str = "", genre: str = "", sort: str = "new", limit: i
     order = _ITEM_ORDER.get(sort, _ITEM_ORDER["new"])
     rows = await _all(f"{cte}SELECT i.* {frm}{w_sql} ORDER BY {order} LIMIT ? OFFSET ?", [*params, limit, offset])
     return rows, total
+
+
+async def hero_items(limit: int = 5):
+    """Katalog tepasidagi slayder uchun: avval muqovasi borlar, eng yangilaridan."""
+    cte = f"WITH items AS ({_ITEMS}) "
+    return await _all(
+        f"{cte}SELECT i.* FROM items i ORDER BY (i.cover_id != '') DESC, i.created_at DESC LIMIT ?", (limit,))
+
+
+async def similar_items(t: str, iid: int, kind: str, genre: str, year: str, limit: int = 8):
+    """O'xshash kontent: umumiy janrlar (eng muhim), bir xil tur va yaqin yil bo'yicha ball beradi."""
+    genres = [g for g in (norm(x) for x in (genre or "").split(",")) if g]
+    conds, params = ["i.kind=?"], [kind]
+    for g in genres:
+        conds.append("(',' || i.genre_lc || ',') LIKE ?")
+        params.append(f"%,{g},%")
+    sql = (f"WITH items AS ({_ITEMS}) SELECT i.* FROM items i "
+           f"WHERE NOT (i.t=? AND i.id=?) AND ({' OR '.join(conds)}) ORDER BY i.views DESC LIMIT 300")
+    rows = await _all(sql, [t, iid, *params])
+    gset = set(genres)
+    y0 = int(year) if str(year or "").isdigit() else None
+
+    def score(r) -> int:
+        have = {norm(x) for x in (r["genre_lc"] or "").split(",") if x.strip()}
+        sc = 3 * len(gset & have) + (2 if r["kind"] == kind else 0)
+        ry = str(r["year"] or "")
+        if y0 is not None and ry.isdigit() and abs(int(ry) - y0) <= 3:
+            sc += 1
+        return sc
+
+    ranked = sorted(rows, key=lambda r: (-score(r), -(r["views"] or 0)))
+    return ranked[:limit]
+
+
+async def watched_episodes(uid: int, sid: int):
+    """Foydalanuvchi ko'rgan qismlar (eng oxirgisi birinchi)."""
+    return await _all(
+        "SELECT v.movie_id AS mid, MAX(v.at) AS at FROM views v JOIN movies m ON m.id=v.movie_id "
+        "WHERE v.user_id=? AND m.series_id=? GROUP BY v.movie_id ORDER BY at DESC, mid DESC",
+        (uid, sid),
+    )
 
 
 async def pending_groups():

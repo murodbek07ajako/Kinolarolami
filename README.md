@@ -1,4 +1,4 @@
-# 🎬 Kino Bot (Telegram bot + Mini App)
+# 🎬 MEGA CINEMA (Telegram bot + Mini App)
 
 ## Imkoniyatlar
 - Chiroyli uzun salomlashuv + «🎬 Katalog» (Mini App) tugmasi

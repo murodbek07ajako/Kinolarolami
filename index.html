@@ -5,7 +5,7 @@
 <link rel="icon" href="/logo.png">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Kino Katalog</title>
+<title>MEGA CINEMA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -24,6 +24,33 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;paddin
 #favbtn .fi{filter:grayscale(1);opacity:.6;transition:.2s}
 #favbtn.on{border-color:var(--a1);background:rgba(255,77,109,.16)}
 #favbtn.on .fi{filter:none;opacity:1}
+.hero-s{margin:2px 0 14px}
+.hs-track{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:20px}
+.hs-track::-webkit-scrollbar{display:none}
+.hs{position:relative;flex:none;width:100%;aspect-ratio:16/9;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid var(--line);cursor:pointer}
+.hs .poster{position:absolute;inset:0;aspect-ratio:auto;border-radius:0}
+.hs-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(10,12,19,.92) 8%,rgba(10,12,19,.25) 55%,transparent)}
+.hs-tx{position:absolute;left:14px;right:14px;bottom:12px}
+.hs-t{font-weight:800;font-size:20px;line-height:1.15;letter-spacing:-.2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+.hs-m{color:#d4d9ec;font-size:12.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hs-go{display:inline-block;margin-top:9px;padding:7px 16px;border-radius:99px;background:var(--grad);font-weight:700;font-size:13px;box-shadow:0 6px 18px rgba(255,77,109,.35)}
+.hs-dots{display:flex;justify-content:center;gap:6px;margin-top:9px}
+.hs-dots i{width:6px;height:6px;border-radius:99px;background:var(--line);transition:.25s}
+.hs-dots i.on{width:18px;background:var(--a1)}
+.countrow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 2px 10px}
+.countrow .count{margin:0}
+.sortwrap{position:relative;flex:none}
+#sortbtn{padding:6px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--muted)}
+.sortmenu{position:absolute;right:0;top:38px;z-index:15;min-width:176px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+.sortmenu button{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:600;color:var(--muted)}
+.sortmenu button.on{background:rgba(255,77,109,.16);color:var(--text)}
+.epb.seen{background:rgba(61,220,151,.1);border-color:rgba(61,220,151,.4);color:var(--ok)}
+.epb.last{outline:2px solid var(--a1);outline-offset:1px}
+.simrow{display:flex;gap:10px;overflow-x:auto;padding:8px 16px 4px;scrollbar-width:none}
+.simrow::-webkit-scrollbar{display:none}
+.sim{flex:none;width:106px;cursor:pointer}
+.sim .poster{border-radius:12px;border:1px solid var(--line)}
+.sim .st{font-size:12px;font-weight:600;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hi{font-size:21px;font-weight:800;letter-spacing:-.3px;padding-right:50px}
 .hi b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .sub{color:var(--muted);font-size:13px;margin-top:2px}
@@ -200,7 +227,21 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 </header>
 
 <main>
-  <div class="count" id="count"></div>
+  <section class="hero-s" id="heroS" hidden>
+    <div class="hs-track" id="hsTrack"></div>
+    <div class="hs-dots" id="hsDots"></div>
+  </section>
+  <div class="countrow">
+    <div class="count" id="count"></div>
+    <div class="sortwrap" id="sortwrap">
+      <button id="sortbtn" type="button">⇅ <span id="sortlbl">Yangi</span></button>
+      <div class="sortmenu" id="sortmenu" hidden>
+        <button data-order="new" class="on">🆕 Yangi</button>
+        <button data-order="top">🔥 Top</button>
+        <button data-order="year">📅 Yil bo'yicha</button>
+      </div>
+    </div>
+  </div>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" hidden></div>
   <div id="sentinel"></div>
@@ -233,7 +274,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   const $ = s => document.querySelector(s);
   const initData = (tg && tg.initData) || '';
   const PAGE = 20;
-  const S = { q: '', genre: '', kind: '', sort: 'new', autoOpen: false, offset: 0, loading: false, done: false, gen: 0, favs: new Set(), favChanged: false, genres: [] };
+  const S = { q: '', genre: '', kind: '', sort: 'new', order: 'new', autoOpen: false, offset: 0, loading: false, done: false, gen: 0, favs: new Set(), favChanged: false, genres: [] };
 
   const haptic = (t = 'light') => { try { tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -332,7 +373,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   /* ───────── Yuklash ───────── */
   async function load(reset) {
     if (reset) {
-      S.offset = 0; S.done = false; S.gen++; S.loading = false;
+      S.offset = 0; S.done = false; S.gen++; S.loading = false; syncUI();
       grid.replaceChildren(); $('#empty').hidden = true; skeleton();
     }
     if (S.loading || S.done) return;
@@ -378,12 +419,66 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     genres.forEach(g => box.appendChild(mk(g, g)));
   }
 
+  /* ───────── Saralash menyusi ───────── */
+  const ORDERS = { new: 'Yangi', top: 'Top', year: 'Yil bo\'yicha' };
+  const sortbtn = $('#sortbtn'), sortmenu = $('#sortmenu');
+  sortbtn.addEventListener('click', e => { e.stopPropagation(); haptic(); sortmenu.hidden = !sortmenu.hidden; });
+  sortmenu.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    e.stopPropagation(); haptic();
+    S.order = b.dataset.order;
+    if (S.sort !== 'fav') S.sort = S.order;
+    sortmenu.hidden = true; load(true);
+  });
+  document.addEventListener('click', () => { sortmenu.hidden = true; });
+  function syncUI() {
+    $('#sortwrap').hidden = S.sort === 'fav';
+    $('#sortlbl').textContent = ORDERS[S.order] || 'Yangi';
+    sortmenu.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.order === S.order));
+    updateHero();
+  }
+
+  /* ───────── Hero slayder ───────── */
+  const heroS = $('#heroS'), hsTrack = $('#hsTrack'), hsDots = $('#hsDots');
+  let HERO = [], heroPause = 0;
+  const hsStep = () => hsTrack.clientWidth + 10;
+  function updateHero() {
+    heroS.hidden = !(HERO.length && !S.q && !S.genre && !S.kind && S.sort !== 'fav');
+  }
+  function buildHero(items) {
+    HERO = items || []; hsTrack.replaceChildren(); hsDots.replaceChildren();
+    HERO.forEach((m, i) => {
+      const s = el('div', 'hs');
+      const bg = posterBox(m); s.appendChild(bg);
+      s.appendChild(el('div', 'hs-shade'));
+      const tx = el('div', 'hs-tx');
+      tx.appendChild(el('div', 'hs-t', m.title));
+      const meta = [m.year, (m.genre || '').split(',')[0].trim(), m.t === 's' ? m.eps + ' qism' : m.quality].filter(Boolean).join(' · ');
+      if (meta) tx.appendChild(el('div', 'hs-m', meta));
+      tx.appendChild(el('span', 'hs-go', '▶ Ko\'rish'));
+      s.appendChild(tx);
+      s.onclick = () => { haptic(); openSheet(m); };
+      hsTrack.appendChild(s); hsDots.appendChild(el('i', i === 0 ? 'on' : ''));
+    });
+    updateHero();
+  }
+  hsTrack.addEventListener('scroll', () => {
+    const i = Math.round(hsTrack.scrollLeft / (hsStep() || 1));
+    hsDots.querySelectorAll('i').forEach((d, k) => d.classList.toggle('on', k === i));
+  }, { passive: true });
+  ['touchstart', 'pointerdown', 'wheel'].forEach(ev => hsTrack.addEventListener(ev, () => { heroPause = Date.now() + 9000; }, { passive: true }));
+  setInterval(() => {
+    if (heroS.hidden || HERO.length < 2 || sheetOpen || admOpen || Date.now() < heroPause) return;
+    const i = (Math.round(hsTrack.scrollLeft / hsStep()) + 1) % HERO.length;
+    hsTrack.scrollTo({ left: i * hsStep(), behavior: 'smooth' });
+  }, 4500);
+
   const favbtn = $('#favbtn');
   favbtn.addEventListener('click', ev => {
     ev.preventDefault(); ev.stopPropagation();
     haptic();
     const on = S.sort !== 'fav';
-    S.sort = on ? 'fav' : 'new';
+    S.sort = on ? 'fav' : S.order;
     favbtn.classList.toggle('on', on); favbtn.setAttribute('aria-pressed', on);
     load(true);
   });
@@ -408,7 +503,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 
   /* ───────── Kino oynasi (bottom sheet) ───────── */
   const sheet = $('#sheet'), ov = $('#ov');
-  let sheetOpen = false;
+  let sheetOpen = false, sheetGen = 0;
 
   function closeSheet() {
     if (!sheetOpen) return;
@@ -421,15 +516,18 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   ov.onclick = closeSheet;
 
   async function openSheet(m) {
+    const was = sheetOpen, gen = ++sheetGen;
     sheetOpen = true;
     sheet.replaceChildren(el('div', 'grab'), el('div', 'loader', '⏳ Yuklanmoqda...'));
     sheet.scrollTop = 0;
     sheet.classList.add('on'); ov.classList.add('on');
-    try { tg.BackButton.onClick(closeSheet); tg.BackButton.show(); } catch (e) {}
+    if (!was) { try { tg.BackButton.onClick(closeSheet); tg.BackButton.show(); } catch (e) {} }
     try {
-      renderSheet(await api((m.t === 's' ? '/api/series/' : '/api/movie/') + m.id));
+      const d = await api((m.t === 's' ? '/api/series/' : '/api/movie/') + m.id);
+      if (gen !== sheetGen) return;
+      renderSheet(d); loadSimilar(d, gen);
     } catch (e) {
-      closeSheet(); toast('Topilmadi');
+      if (gen === sheetGen) { closeSheet(); toast('Topilmadi'); }
     }
   }
 
@@ -447,6 +545,23 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
         setTimeout(() => { try { tg.close(); } catch (e) { reset(); } }, 2000);
       } else { toast('⚠️ Yuborib bo\'lmadi'); reset(); }
     } catch (e) { toast('Xatolik, qayta urinib ko\'ring'); reset(); }
+  }
+
+  async function loadSimilar(m, gen) {
+    try {
+      const d = await api('/api/similar/' + (m.t === 's' ? 's' : 'm') + '/' + m.id);
+      if (gen !== sheetGen || !sheetOpen || !d.items.length) return;
+      sheet.appendChild(el('div', 'sec', '🎬 O\'xshash kontent'));
+      const row = el('div', 'simrow');
+      d.items.forEach(x => {
+        const c = el('div', 'sim');
+        const p = posterBox(x); c.appendChild(p);
+        c.appendChild(el('div', 'st', x.title));
+        c.onclick = () => { haptic(); openSheet(x); };
+        row.appendChild(c);
+      });
+      sheet.appendChild(row);
+    } catch (e) {}
   }
 
   const KIND_LABEL = { kino: '🎬 Kino', multfilm: '🧸 Multfilm', serial: '📺 Serial', anime: '🎌 Anime' };
@@ -474,10 +589,21 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     const acts = el('div', 'acts');
     const fav = el('button', 'btn fav', S.favs.has(fk) ? '❤️' : '🤍');
     if (isS) {
+      const seen = new Set(m.seen || []);
+      const live = m.eps.filter(e => e.live);
+      const li = m.last ? live.findIndex(e => e.id === m.last) : -1;
+      if (li >= 0) {
+        const nx = live[li + 1], tgt = nx || live[li];
+        const label = nx ? '▶ ' + nx.ep + '-qismdan davom etish' : '🔁 ' + tgt.ep + '-qismni qayta ko\'rish';
+        const ca = el('div', 'acts'); ca.style.paddingTop = '12px';
+        const cb = el('button', 'btn main', label);
+        cb.onclick = () => sendToBot(tgt.id, cb, label);
+        ca.appendChild(cb); sheet.appendChild(ca);
+      }
       sheet.appendChild(el('div', 'sec', 'Qismni tanlang 👇'));
       const g = el('div', 'epgrid');
       m.eps.forEach(e => {
-        const b = el('button', 'epb' + (e.live ? '' : ' pend'), String(e.ep));
+        const b = el('button', 'epb' + (e.live ? '' : ' pend') + (seen.has(e.id) ? ' seen' : '') + (e.id === m.last ? ' last' : ''), String(e.ep));
         b.title = e.ep + '-qism';
         b.onclick = () => sendToBot(e.id, b, String(e.ep));
         g.appendChild(b);
@@ -1285,6 +1411,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       if (q0) { qi.value = q0; clr.hidden = false; S.q = q0; S.autoOpen = /^[sma]\s*\.\s*\d+$/i.test(q0); }
     } catch (e) {}
     load(true);
+    api('/api/hero').then(d => buildHero(d.items)).catch(() => {});
   }
   init();
 })();
