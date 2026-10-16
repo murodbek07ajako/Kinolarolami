@@ -254,10 +254,18 @@ async def on_text(m: Message, bot: Bot):
     q = m.text.strip()
     code = db.parse_series_code(q)
     if code:
+        ser = await db.get_series(code[1]) if code[1] else None
+        eps = await db.episodes(ser["id"]) if ser and ser["kind"] == code[0] else []
+        if not eps:
+            # Qismli emas — dona multfilm / anime bo'lishi mumkin (m.5 / a.5)
+            single = await db.movie_by_num(code[2], code[0])
+            if single:
+                if not await gate(bot, m, single["id"]):
+                    return
+                await reply_deliver(bot, m, single["id"])
+                return
         if not await gate(bot, m):
             return
-        ser = await db.get_series(code[1])
-        eps = await db.episodes(ser["id"]) if ser and ser["kind"] == code[0] else []
         if not eps:
             await m.answer(
                 f"❌ <code>{html.escape(q)}</code> kodli {svc.KIND_NAME.get(code[0], 'kontent')} topilmadi.\n\n"

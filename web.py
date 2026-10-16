@@ -89,7 +89,7 @@ def _brief(r) -> dict:
     return {
         "t": t, "id": r["id"], "fk": r["fk"] if "fk" in r.keys() else r["id"],
         "kind": r["kind"], "code": db.series_code(r["kind"], r["id"]) if t == "s"
-        else str((r["num"] if "num" in r.keys() else None) or r["id"]),
+        else db.movie_code(r),
         "eps": r["eps"] if "eps" in r.keys() else 0,
         "title": r["title"], "year": r["year"], "genre": r["genre"],
         "country": r["country"], "quality": r["quality"], "views": r["views"],
@@ -270,7 +270,7 @@ async def logo(request: web.Request):
 async def api_admin_stats(request: web.Request):
     _admin(request, "stats")
     s = await db.stats()
-    s["top"] = [{"id": t["id"], "code": t["num"] or t["id"], "title": t["title"], "views": t["views"]} for t in s["top"]]
+    s["top"] = [{"id": t["id"], "code": db.movie_code(t), "title": t["title"], "views": t["views"]} for t in s["top"]]
     return web.json_response(s)
 
 
@@ -380,7 +380,7 @@ async def api_admin_pending(request: web.Request):
             "key": g["key"], "kind": g["kind"], "count": len(g["rows"]),
             "series": ({"id": ser["id"], "title": ser["title"], "code": db.series_code(ser["kind"], ser["id"])}
                        if ser else None),
-            "items": [{"id": r["id"], "code": r["num"] or r["id"], "title": r["title"], "year": r["year"], "genre": r["genre"], "ep": r["ep"]}
+            "items": [{"id": r["id"], "code": db.movie_code(r), "title": r["title"], "year": r["year"], "genre": r["genre"], "ep": r["ep"]}
                       for r in g["rows"]],
         })
     return web.json_response({"groups": groups, "total": sum(g["count"] for g in groups)})
@@ -419,7 +419,7 @@ async def api_admin_movie_get(request: web.Request):
     if not m:
         raise web.HTTPNotFound(reason="not found")
     _kind_ok(user, m["kind"])
-    return web.json_response({"movie": {"id": m["id"], "code": m["num"] or m["id"], **{k: m[k] or "" for k in db.META_FIELDS}, "cv": _cv(m["cover_id"])}})
+    return web.json_response({"movie": {"id": m["id"], "code": db.movie_code(m), **{k: m[k] or "" for k in db.META_FIELDS}, "cv": _cv(m["cover_id"])}})
 
 
 async def api_admin_series_get(request: web.Request):

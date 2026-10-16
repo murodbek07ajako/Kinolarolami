@@ -140,13 +140,8 @@ async def _migrate() -> None:
     # Yakka kinolarning o'z kodi (1, 2, 3...) — qismlar (serial/multfilm/anime) bu hisobga kirmaydi
     if "num" not in cols:
         await _db.execute("ALTER TABLE movies ADD COLUMN num INTEGER")
-    last = (await _one("SELECT COALESCE(MAX(num), 0) AS n FROM movies WHERE series_id IS NULL"))["n"]
-    for r in await _all("SELECT id FROM movies WHERE series_id IS NULL AND (num IS NULL OR num=0) ORDER BY id"):
-        last += 1
-        await _db.execute("UPDATE movies SET num=? WHERE id=?", (last, r["id"]))
-    await _db.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_num ON movies(num) WHERE series_id IS NULL AND num IS NOT NULL"
-    )
+    # Eski yagona (barcha turlar uchun umumiy) indeks olib tashlanadi: endi har tur o'z raqamini sanaydi
+    await _db.execute("DROP INDEX IF EXISTS idx_movies_num")
     scols = {r["name"] for r in await _all("PRAGMA table_info(sources)")}
     if "kind" not in scols:
         await _db.execute("ALTER TABLE sources ADD COLUMN kind TEXT NOT NULL DEFAULT 'kino'")
@@ -167,6 +162,7 @@ async def _migrate() -> None:
             last += 1
             await _db.execute("UPDATE series SET num=? WHERE id=?", (last, r["id"]))
     await _db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_series_num ON series(kind, num)")
+    await _reconcile_nums()
     await _db.execute("CREATE INDEX IF NOT EXISTS idx_movies_series ON movies(series_id)")
     await _db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_ep ON movies(series_id, ep) WHERE series_id IS NOT NULL"
@@ -300,8 +296,8 @@ async def add_movie(d: dict) -> int:
     search, genre_lc = _derive(d)
     async with _movie_lock:
         num = None
-        if not d.get("series_id"):  # yakka kino: o'z tartib raqami (kodi) — qismlardan mustaqil
-            num = (await _one("SELECT COALESCE(MAX(num), 0) + 1 AS n FROM movies WHERE series_id IS NULL"))["n"]
+        if not d.get("series_id"):  # yakka kontent: o'z turi ichida tartib raqami (kodi)
+            num = await _next_num(d.get("kind", "kino"))
         return await _run(
             """INSERT INTO movies(title, description, year, genre, genre_lc, country, language, quality,
                                   file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg, status,
@@ -317,9 +313,49 @@ async def add_movie(d: dict) -> int:
         )
 
 
-async def movie_by_num(n: int):
-    """Yakka kinoni foydalanuvchi ko'radigan kodi (1, 2, 3...) bo'yicha topadi."""
-    return await _one("SELECT * FROM movies WHERE series_id IS NULL AND num=?", (n,))
+async def _next_num(kind: str) -> int:
+    """Shu tur uchun keyingi bo'sh raqam. Yakka (dona) va qismli kontent BIR hisobdan foydalanadi,
+    shuning uchun m.1 ham dona multfilm, ham qismli multfilm bo'la olmaydi."""
+    a = (await _one("SELECT COALESCE(MAX(num), 0) AS n FROM movies WHERE series_id IS NULL AND kind=?", (kind,)))["n"]
+    b = (await _one("SELECT COALESCE(MAX(num), 0) AS n FROM series WHERE kind=?", (kind,)))["n"]
+    return max(a, b) + 1
+
+
+async def _reconcile_nums() -> None:
+    """Eski bazani tuzatadi: raqami yo'q yoki qismli kontent bilan to'qnashgan yakka kontentga
+    o'z turi bo'yicha yangi raqam beradi, so'ng (tur, raqam) bo'yicha yagona indeks yaratadi."""
+    used = {(r["kind"], r["num"]) for r in await _all("SELECT kind, num FROM series WHERE num IS NOT NULL")}
+    keep, need = set(), []
+    for r in await _all("SELECT id, kind, num FROM movies WHERE series_id IS NULL ORDER BY id"):
+        k = (r["kind"], r["num"])
+        if r["num"] and k not in keep and k not in used:
+            keep.add(k)
+        else:
+            need.append(r)
+    top: dict[str, int] = {}
+    for kind, num in keep | used:
+        top[kind] = max(top.get(kind, 0), num)
+    for r in need:
+        top[r["kind"]] = top.get(r["kind"], 0) + 1
+        await _db.execute("UPDATE movies SET num=? WHERE id=?", (top[r["kind"]], r["id"]))
+    await _db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_kind_num ON movies(kind, num) "
+        "WHERE series_id IS NULL AND num IS NOT NULL"
+    )
+
+
+async def movie_by_num(n: int, kind: str = "kino"):
+    """Yakka kontentni foydalanuvchi ko'radigan kodi bo'yicha topadi: kino — 1, 2, 3; multfilm — m.1; anime — a.1."""
+    return await _one("SELECT * FROM movies WHERE series_id IS NULL AND kind=? AND num=?", (kind, n))
+
+
+async def movie_by_code(text: str):
+    """'12' (kino) yoki 'm.3' / 'a.3' (dona multfilm / anime) -> yakka kontent qatori yoki None."""
+    t = (text or "").strip().lower()
+    if t.isdigit():
+        return await movie_by_num(int(t)) if len(t) < 10 else None
+    c = parse_series_code(t)
+    return await movie_by_num(c[2], c[0]) if c else None
 
 
 async def update_movie_meta(mid: int, d: dict) -> None:
@@ -414,25 +450,35 @@ async def _load_nums() -> None:
             _BYNUM[(r["kind"], r["num"])] = r["id"]
 
 
+def movie_code(m) -> str:
+    """Yakka kontent kodi: kino — 1, 2, 3; multfilm — m.1; anime — a.1."""
+    keys = m.keys()
+    if "series_id" in keys and m["series_id"]:
+        return series_code(m["kind"], m["series_id"])
+    num = (m["num"] if "num" in keys else None) or m["id"]
+    pre = KIND_PREFIX.get(m["kind"]) if "kind" in keys else None
+    return f"{pre}.{num}" if pre else str(num)
+
+
 def series_code(kind: str, sid: int) -> str:
     return f"{KIND_PREFIX.get(kind, 's')}.{_NUM.get(sid, sid)}"
 
 
 def parse_series_code(text: str):
-    """'s.12' / 'M.3' -> (tur, series.id) yoki None. Shunday raqamli serial yo'q bo'lsa id=0 qaytadi (topilmadi)."""
+    """'s.12' / 'M.3' -> (tur, series.id yoki 0, raqam) yoki None. Shunday qismli kontent yo'q bo'lsa id=0."""
     import re
     m = re.fullmatch(r"([sma])\s*\.\s*(\d+)", (text or "").strip().lower())
     if not m:
         return None
     kind = PREFIX_KIND[m.group(1)]
-    return kind, _BYNUM.get((kind, int(m.group(2))), 0)
+    return kind, _BYNUM.get((kind, int(m.group(2))), 0), int(m.group(2))
 
 
 async def add_series(d: dict) -> int:
     search, genre_lc = _derive(d)
     kind = d.get("kind", "serial")
-    async with _series_lock:
-        num = (await _one("SELECT COALESCE(MAX(num), 0) + 1 AS n FROM series WHERE kind=?", (kind,)))["n"]
+    async with _movie_lock:  # dona kontent bilan bir qulf: raqamlar to'qnashmasin
+        num = await _next_num(kind)
         sid = await _run(
             """INSERT INTO series(kind, title, description, year, genre, genre_lc, country, language,
                                   poster_id, search_text, created_at, num, cover_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -552,8 +598,8 @@ async def search_items(q: str = "", genre: str = "", sort: str = "new", limit: i
     where = []
     code = parse_series_code(q)
     if code:
-        where.append("i.t='s' AND i.kind=? AND i.id=?")
-        params += [code[0], code[1]]
+        where.append("((i.t='s' AND i.kind=? AND i.id=?) OR (i.t='m' AND i.kind=? AND i.num=?))")
+        params += [code[0], code[1], code[0], code[2]]
     else:
         for w in norm(q).split():
             where.append("i.search_text LIKE ?")

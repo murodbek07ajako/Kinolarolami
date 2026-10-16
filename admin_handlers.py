@@ -433,6 +433,17 @@ async def draft_photo(m: Message):
 async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
     arg = (command.args or "").strip()
     code = db.parse_series_code(arg)
+    if code and not (code[1] and (await db.get_series(code[1]) or {"kind": None})["kind"] == code[0]):
+        single = await db.movie_by_code(arg)  # dona multfilm / anime (m.5 / a.5)
+        if not single:
+            return await m.answer(f"❌ Bunday kodli {svc.KIND_NAME.get(code[0], 'kontent')} topilmadi.")
+        deny = _kind_denied(m.from_user.id, single["kind"])
+        if deny:
+            return await m.answer(deny)
+        await state.set_state(PosterSet.wait)
+        await state.update_data(movie_id=single["id"])
+        return await m.answer(f"🖼 <b>{html.escape(single['title'])}</b> uchun yangi poster (rasm) yuboring:",
+                              reply_markup=kb.cancel_kb())
     if code:
         ser = await db.get_series(code[1])
         if not ser or ser["kind"] != code[0]:
@@ -496,9 +507,9 @@ async def del_start(c: CallbackQuery, state: FSMContext):
 
 @router.message(DelMovie.code)
 async def del_code(m: Message, state: FSMContext):
-    if not (m.text and m.text.strip().isdigit()):
-        return await m.answer("❗ Faqat raqam (kino kodi) yuboring.")
-    movie = await db.movie_by_num(int(m.text.strip()))
+    movie = await db.movie_by_code(m.text) if m.text else None
+    if not movie and not (m.text and (m.text.strip().isdigit() or db.parse_series_code(m.text))):
+        return await m.answer("❗ Kod yuboring (masalan: 12, m.3 yoki a.2).")
     if not movie:
         return await m.answer("❌ Bunday kodli kino topilmadi. Qayta yuboring:")
     deny = _kind_denied(m.from_user.id, movie["kind"])
