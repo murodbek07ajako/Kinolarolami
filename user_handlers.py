@@ -256,29 +256,34 @@ async def on_text(m: Message, bot: Bot):
     if code:
         ser = await db.get_series(code[1]) if code[1] else None
         eps = await db.episodes(ser["id"]) if ser and ser["kind"] == code[0] else []
+        # Faqat oddiy kino kodi videoni darhol yuboradi. Serial / multfilm / anime (qismli ham, dona ham):
+        # nomi chiqadi va katalogga yo'naltiriladi — ko'rish u yerdan.
+        single = None
         if not eps:
-            # Qismli emas — dona multfilm / anime bo'lishi mumkin (m.5 / a.5)
             single = await db.movie_by_num(code[2], code[0])
-            if single:
-                if not await gate(bot, m, single["id"]):
-                    return
-                await reply_deliver(bot, m, single["id"])
-                return
+            if single and single["status"] != "live":
+                single = None
         if not await gate(bot, m):
             return
-        if not eps:
+        if not eps and not single:
             await m.answer(
                 f"❌ <code>{html.escape(q)}</code> kodli {svc.KIND_NAME.get(code[0], 'kontent')} topilmadi.\n\n"
                 f"Kodni tekshirib qayta yuboring yoki katalogdan {svc.KIND_NAME.get(code[0], 'kontent')} qidiring.",
                 reply_markup=kb.open_catalog_kb(),
             )
             return
-        c = db.series_code(ser["kind"], ser["id"])
+        if eps:
+            kind, title, c = ser["kind"], ser["title"], db.series_code(ser["kind"], ser["id"])
+            head = f"{svc.KIND_EMOJI.get(kind, '📺')} <b>{html.escape(title)}</b> — <b>{len(eps)}</b> ta qism bor."
+            how = "kerakli qismni tanlang"
+        else:
+            kind, title, c = single["kind"], single["title"], db.movie_code(single)
+            head = f"{svc.KIND_EMOJI.get(kind, '🎬')} <b>{html.escape(title)}</b>"
+            how = "«Botda ko'rish» tugmasini bosing"
         await m.answer(
-            f"{svc.KIND_EMOJI.get(ser['kind'], '📺')} <b>{html.escape(ser['title'])}</b> — "
-            f"<b>{len(eps)}</b> ta qism bor.\n\n"
-            f"Qismlarni ko'rish uchun <b>katalogni</b> oching: u yerda qidiruvga "
-            f"<code>{c}</code> deb yozing va kerakli qismni tanlang. 👇",
+            f"{head}\n\n"
+            f"Ko'rish uchun <b>katalogni</b> oching: u yerda qidiruvga "
+            f"<code>{c}</code> deb yozing va {how}. 👇",
             reply_markup=kb.catalog_query_kb(c),
         )
         return

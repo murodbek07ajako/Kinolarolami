@@ -389,7 +389,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       S.done = S.offset >= d.total || d.items.length === 0;
       $('#count').textContent = d.total ? d.total + ' ta natija' : '';
       if (d.total === 0) showEmpty();
-      if (S.autoOpen) { S.autoOpen = false; if (d.total === 1 && d.items[0].t === 's') openSheet(d.items[0]); }
+      if (S.autoOpen) { S.autoOpen = false; if (d.total === 1) openSheet(d.items[0]); }
     } catch (e) {
       if (gen !== S.gen) return;
       clearSkeleton();
