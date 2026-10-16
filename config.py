@@ -22,6 +22,9 @@ BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_IDS: set[int] = {
     int(x) for x in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if x.lstrip("-").isdigit()
 }
+# Mini App chatidagi «Adminga murojaat» tugmasi shu foydalanuvchining lichkasini ochadi (@siz, @ belgisiz ham bo'ladi).
+# Bo'sh qoldirsangiz — birinchi bosh adminning ID si ishlatiladi.
+ADMIN_CONTACT: str = os.getenv("ADMIN_CONTACT", "").strip().lstrip("@")
 BOT_TITLE: str = os.getenv("BOT_TITLE", "MEGA CINEMA").strip()
 PORT: int = int(os.getenv("PORT", "8080"))
 DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "data" / "bot.db"))

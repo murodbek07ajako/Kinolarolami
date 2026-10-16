@@ -242,6 +242,52 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 .cvbox{margin:12px 0 4px}
 .cvbox .cover{margin:6px 0 4px}
 .cvbtns{display:flex;gap:8px;flex-wrap:wrap}
+/* ── Chat ── */
+:root{--cg:9vw}
+.chat-fab{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:35;width:56px;height:56px;border-radius:50%;background:var(--grad);color:var(--onacc);font-size:25px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(var(--a1rgb),.45),0 0 0 4px rgba(var(--a1rgb),.12);transition:transform .15s}
+.chat-fab:active{transform:scale(.9)}
+.chat-fab::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(var(--a1rgb),.5);animation:pulse 2.6s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.35);opacity:0}}
+.chat-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .25s;z-index:70}
+.chat-ov.on{opacity:1;pointer-events:auto}
+.chat{position:fixed;left:var(--cg);right:0;top:calc(var(--cg)*2);bottom:0;z-index:71;display:flex;flex-direction:column;background:var(--bg2);border-left:1px solid var(--line);border-top:1px solid var(--line);border-radius:24px 0 0 0;box-shadow:-12px 0 40px rgba(0,0,0,.5);transform:translateX(105%);visibility:hidden;transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility 0s .32s;padding-bottom:env(safe-area-inset-bottom)}
+.chat.on{transform:none;visibility:visible;transition:transform .32s cubic-bezier(.2,.8,.2,1)}
+.chat-hd{flex:none;display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0 18px}
+.chat-hd b{font-size:17px;font-weight:800}
+.chat-x{width:32px;height:32px;border-radius:50%;background:var(--card);border:1px solid var(--line);font-size:13px}
+.chat-tabs{flex:none;display:flex;gap:6px;margin:12px 14px 0;padding:4px;border-radius:14px;background:var(--bg);border:1px solid var(--line)}
+.chat-tabs button{flex:1;padding:9px 4px;border-radius:10px;font-size:13px;font-weight:700;color:var(--muted);transition:.2s}
+.chat-tabs button.on{background:var(--grad);color:var(--onacc)}
+.chat-pane{flex:1;min-height:0;display:none;flex-direction:column}
+.chat-pane.on{display:flex}
+.cmsgs{flex:1;min-height:0;overflow-y:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:7px;overscroll-behavior:contain}
+.cmsg{max-width:86%;padding:8px 12px 6px;border-radius:16px 16px 16px 4px;background:var(--card);border:1px solid var(--line);align-self:flex-start;animation:in .25s both;word-break:break-word}
+.cmsg.mine{align-self:flex-end;border-radius:16px 16px 4px 16px;background:var(--grad);border-color:transparent;color:var(--onacc)}
+.cn{font-size:12px;font-weight:800;margin-bottom:2px;display:flex;align-items:center;gap:5px}
+.cn .adm-b{font-size:10px;padding:1px 6px;border-radius:99px;background:var(--grad);color:var(--onacc);font-weight:800}
+.ct{font-size:14.5px;line-height:1.35;white-space:pre-wrap}
+.cm{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:10.5px;opacity:.6;margin-top:2px}
+.cdel{font-size:12px;opacity:1}
+.cempty{margin:auto;text-align:center;color:var(--muted);font-size:13.5px;padding:20px}
+.cempty .e{font-size:42px;margin-bottom:6px}
+.cbar{flex:none;display:flex;align-items:flex-end;gap:8px;padding:8px 12px 12px;border-top:1px solid var(--line)}
+.cbar textarea{flex:1;min-width:0;resize:none;max-height:96px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px 14px;color:var(--text);font:inherit;font-size:15px;outline:0;line-height:1.3}
+.cbar textarea:focus{border-color:var(--a1)}
+.csend{flex:none;width:42px;height:42px;border-radius:50%;background:var(--grad);color:var(--onacc);font-size:18px;display:flex;align-items:center;justify-content:center;transition:transform .15s,opacity .2s}
+.csend:active{transform:scale(.9)}.csend:disabled{opacity:.45}
+.ctop{flex:none;text-align:center;color:var(--muted);font-size:11.5px;padding:6px 12px 0}
+.apane{flex:1;min-height:0;overflow-y:auto;padding:18px 16px 8px}
+.acard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.acard .ai{font-size:34px}
+.acard h3{margin:6px 0 4px;font-size:17px}
+.acard p{margin:0;color:var(--muted);font-size:13.5px}
+.areasons{margin-top:14px;display:grid;gap:8px}
+.areasons div{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:14px;background:var(--bg2);border:1px solid var(--line);font-weight:600;font-size:14px}
+.areasons div span{font-size:22px}
+.anote{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(var(--a1rgb),.1);border:1px dashed rgba(var(--a1rgb),.45);font-size:12.5px;color:var(--muted)}
+.abar{flex:none;padding:8px 14px 14px;border-top:1px solid var(--line)}
+.abtn{width:100%;padding:14px;border-radius:14px;background:var(--grad);color:var(--onacc);font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(var(--a1rgb),.35)}
+.abtn:active{transform:scale(.98)}
 </style>
 </head>
 <body>
@@ -301,6 +347,39 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     </div>
   </div>
   <div class="adm-body" id="admBody"></div>
+</section>
+
+<button class="chat-fab" id="chatFab" aria-label="Chat">💬</button>
+<div class="chat-ov" id="chatOv"></div>
+<section class="chat" id="chat" aria-modal="true">
+  <div class="chat-hd"><b>💬 Chat</b><button class="chat-x" id="chatX" aria-label="Yopish">✕</button></div>
+  <div class="chat-tabs" id="chatTabs">
+    <button data-p="pub" class="on">👥 Umumiy chat</button>
+    <button data-p="adm">📩 Adminga murojaat</button>
+  </div>
+  <div class="chat-pane on" id="paneP">
+    <div class="ctop">Hamma foydalanuvchilar shu yerda gaplashadi. Odobli bo'ling 🙂</div>
+    <div class="cmsgs" id="cmsgs"></div>
+    <div class="cbar">
+      <textarea id="cin" rows="1" maxlength="500" placeholder="Xabar yozing..." enterkeyhint="send"></textarea>
+      <button class="csend" id="csend" aria-label="Yuborish">➤</button>
+    </div>
+  </div>
+  <div class="chat-pane" id="paneA">
+    <div class="apane">
+      <div class="acard">
+        <div class="ai">🧑‍💼</div>
+        <h3>Adminga murojaat</h3>
+        <p>Admin bilan shaxsiy suhbatda bog'laning. Quyidagi masalalar bo'yicha yozishingiz mumkin:</p>
+        <div class="areasons">
+          <div><span>📢</span>Reklama bo'yicha</div>
+          <div><span>💡</span>Loyiha bo'yicha maslahat</div>
+        </div>
+        <div class="anote">ℹ️ Bu yerda xabar yozib bo'lmaydi. «Adminga yozish» tugmasini bossangiz, adminning shaxsiy chati ochiladi.</div>
+      </div>
+    </div>
+    <div class="abar"><button class="abtn" id="abtn">✍️ Adminga yozish</button></div>
+  </div>
 </section>
 
 <div class="toast" id="toast"></div>
@@ -1566,6 +1645,107 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     return box;
   }
 
+  /* ───────── Chat ───────── */
+  const CH = { open: false, last: 0, timer: null, busy: false, loaded: false, uid: 0, staff: false, contact: '' };
+  const cmsgs = $('#cmsgs'), cin = $('#cin'), csend = $('#csend');
+  const nameHue = s => { let x = 0; for (const c of String(s)) x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
+  const hhmm = ts => { const d = new Date(ts * 1000); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+
+  function chatEmpty() {
+    if (cmsgs.children.length) return;
+    const e = el('div', 'cempty'); e.id = 'cempty';
+    e.appendChild(el('div', 'e', '💬')); e.appendChild(el('div', '', 'Hali xabar yo\'q. Birinchi bo\'lib yozing!'));
+    cmsgs.appendChild(e);
+  }
+  function chatBubble(m) {
+    const b = el('div', 'cmsg' + (m.mine ? ' mine' : '')); b.dataset.id = m.id;
+    if (!m.mine) {
+      const n = el('div', 'cn'); n.style.color = 'hsl(' + nameHue(m.uid) + ',75%,68%)';
+      n.appendChild(el('span', '', m.name));
+      if (m.staff) n.appendChild(el('span', 'adm-b', 'ADMIN'));
+      b.appendChild(n);
+    }
+    b.appendChild(el('div', 'ct', m.text));
+    const meta = el('div', 'cm', hhmm(m.at));
+    if (CH.staff) {
+      const d = el('button', 'cdel', '🗑');
+      d.onclick = async () => {
+        if (!confirm('Xabar o\'chirilsinmi?')) return;
+        try { await api('/api/chat/delete', { id: m.id }); b.remove(); chatEmpty(); } catch (e) { toast(errMsg(e)); }
+      };
+      meta.prepend(d);
+    }
+    b.appendChild(meta);
+    return b;
+  }
+  function chatAdd(items, force) {
+    if (!items.length) return;
+    const nearEnd = force || cmsgs.scrollHeight - cmsgs.scrollTop - cmsgs.clientHeight < 90;
+    const ce = $('#cempty'); if (ce) ce.remove();
+    for (const m of items) {
+      if (m.id <= CH.last && CH.loaded) continue;
+      cmsgs.appendChild(chatBubble(m));
+      CH.last = Math.max(CH.last, m.id);
+    }
+    if (nearEnd) cmsgs.scrollTop = cmsgs.scrollHeight;
+  }
+  async function chatPoll(first) {
+    if (!CH.open || document.hidden) return;
+    try {
+      const d = await api('/api/chat?after=' + (first ? 0 : CH.last));
+      if (first) { cmsgs.textContent = ''; CH.last = 0; CH.loaded = false; }
+      chatAdd(d.items, first); CH.loaded = true;
+      if (first) chatEmpty();
+    } catch (e) { if (first) toast('Chatni yuklab bo\'lmadi'); }
+  }
+  function chatTick() { clearTimeout(CH.timer); if (!CH.open) return; CH.timer = setTimeout(async () => { await chatPoll(false); chatTick(); }, 3000); }
+
+  function openChat() {
+    CH.open = true; haptic();
+    $('#chat').classList.add('on'); $('#chatOv').classList.add('on');
+    try { tg.BackButton.onClick(closeChat); tg.BackButton.show(); } catch (e) {}
+    chatPoll(true).then(chatTick);
+  }
+  function closeChat() {
+    CH.open = false; clearTimeout(CH.timer);
+    $('#chat').classList.remove('on'); $('#chatOv').classList.remove('on');
+    cin.blur();
+    try { tg.BackButton.offClick(closeChat); tg.BackButton.hide(); } catch (e) {}
+  }
+  async function chatSend() {
+    const text = cin.value.trim();
+    if (!text || CH.busy) return;
+    CH.busy = true; csend.disabled = true;
+    try {
+      const r = await api('/api/chat', { text });
+      cin.value = ''; cin.style.height = 'auto';
+      chatAdd([r.item], true);
+    } catch (e) { toast(errMsg(e)); }
+    CH.busy = false; csend.disabled = false; cin.focus();
+  }
+  $('#chatFab').onclick = openChat;
+  $('#chatX').onclick = closeChat;
+  $('#chatOv').onclick = closeChat;
+  csend.onclick = chatSend;
+  cin.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); } });
+  cin.addEventListener('input', () => { cin.style.height = 'auto'; cin.style.height = Math.min(cin.scrollHeight, 96) + 'px'; });
+  $('#chatTabs').addEventListener('click', e => {
+    const b = e.target.closest('button[data-p]'); if (!b) return;
+    haptic();
+    document.querySelectorAll('#chatTabs button').forEach(x => x.classList.toggle('on', x === b));
+    $('#paneP').classList.toggle('on', b.dataset.p === 'pub');
+    $('#paneA').classList.toggle('on', b.dataset.p === 'adm');
+    if (b.dataset.p === 'pub') cmsgs.scrollTop = cmsgs.scrollHeight;
+  });
+  $('#abtn').onclick = () => {
+    haptic('medium');
+    const u = CH.contact;
+    if (!u) { toast('Admin manzili sozlanmagan'); return; }
+    try { if (/^https:\/\/t\.me\//.test(u) && tg.openTelegramLink) { tg.openTelegramLink(u); return; } } catch (e) {}
+    try { tg.openLink(u); } catch (e) { location.href = u; }
+  };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && CH.open) chatPoll(false).then(chatTick); });
+
   /* ───────── Boshlash ───────── */
   async function init() {
     if (!initData) {
@@ -1576,6 +1756,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       const me = await api('/api/me');
       applyTheme(me.theme);
       S.favs = new Set(me.favs);
+      CH.uid = me.uid; CH.staff = !!me.admin; CH.contact = me.contact || '';
             if (me.admin) { ME = Object.assign(ME, me); $('#gear').hidden = false; applyTabs(); }
     } catch (e) {}
     try {

@@ -128,6 +128,58 @@ async def health(request: web.Request):
     return web.json_response({"ok": True})
 
 
+def _contact_link() -> str:
+    """«Adminga murojaat» tugmasi ochadigan havola."""
+    if config.ADMIN_CONTACT:
+        return f"https://t.me/{config.ADMIN_CONTACT}"
+    if config.ADMIN_IDS:
+        return f"tg://user?id={sorted(config.ADMIN_IDS)[0]}"
+    return ""
+
+
+# ───────────── Umumiy chat ─────────────
+CHAT_MAX_LEN = 500
+CHAT_COOLDOWN = 2  # soniya: bir foydalanuvchi ketma-ket yozishi orasidagi eng kam vaqt
+
+
+def _chat_item(r, viewer_id: int) -> dict:
+    return {"id": r["id"], "uid": r["user_id"], "name": r["name"] or "Foydalanuvchi", "text": r["text"],
+            "at": r["at"], "mine": r["user_id"] == viewer_id, "staff": perms.is_staff(r["user_id"])}
+
+
+async def api_chat_list(request: web.Request):
+    user = _auth(request)
+    after = max(int(request.query.get("after", "0") or 0), 0)
+    rows = await db.chat_list(after, 50)
+    return web.json_response({"items": [_chat_item(r, user["id"]) for r in rows]})
+
+
+async def api_chat_send(request: web.Request):
+    user = _auth(request)
+    if await db.is_banned(user["id"]):
+        raise web.HTTPForbidden(reason="Siz chatga yoza olmaysiz")
+    body = await request.json()
+    text = re.sub(r"[ \t]+", " ", str(body.get("text") or "")).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    if not text:
+        return _bad("Xabar yozing")
+    if len(text) > CHAT_MAX_LEN:
+        return _bad(f"Xabar {CHAT_MAX_LEN} belgidan oshmasligi kerak")
+    if time.time() - await db.chat_last_at(user["id"]) < CHAT_COOLDOWN:
+        return web.json_response({"error": "Biroz sekinroq yozing 🙂"}, status=429)
+    name = " ".join(x for x in (user.get("first_name"), user.get("last_name")) if x).strip()
+    name = (name or (f"@{user['username']}" if user.get("username") else "") or "Foydalanuvchi")[:40]
+    msg = await db.chat_add(user["id"], name, text)
+    return web.json_response({"ok": True, "item": {**msg, "mine": True, "staff": perms.is_staff(user["id"])}})
+
+
+async def api_chat_delete(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    await db.chat_delete(int(body.get("id", 0)))
+    return web.json_response({"ok": True})
+
+
 # ───────────── Foydalanuvchi API ─────────────
 async def api_me(request: web.Request):
     user = _auth(request)
@@ -136,7 +188,9 @@ async def api_me(request: web.Request):
         "name": name,
         "theme": await _theme(),
         "favs": await db.fav_ids(user["id"]),
+        "uid": user["id"],
         "admin": perms.is_staff(user["id"]),
+        "contact": _contact_link(),
         **perms.info(user["id"]),
     })
 
@@ -828,6 +882,9 @@ def make_app(bot) -> web.Application:
     r.add_get(r"/api/scover/{id:\d+}", api_scover)
     r.add_get("/api/hero", api_hero)
     r.add_get(r"/api/similar/{t:[ms]}/{id:\d+}", api_similar)
+    r.add_get("/api/chat", api_chat_list)
+    r.add_post("/api/chat", api_chat_send)
+    r.add_post("/api/chat/delete", api_chat_delete)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)

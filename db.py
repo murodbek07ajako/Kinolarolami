@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS views(
   movie_id INTEGER NOT NULL,
   at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chat_messages(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_views_at ON views(at);
 CREATE INDEX IF NOT EXISTS idx_views_user ON views(user_id, at);
 CREATE INDEX IF NOT EXISTS idx_movies_views ON movies(views DESC);
@@ -882,6 +889,35 @@ async def user_name(uid: int) -> str:
     if not row:
         return ""
     return (row["full_name"] or "").strip() or (f"@{row['username']}" if row["username"] else "")
+
+
+# ───────────── Umumiy chat ─────────────
+CHAT_KEEP = 1000  # bazada shuncha oxirgi xabar saqlanadi
+
+
+async def chat_add(uid: int, name: str, text: str) -> dict:
+    now = int(time.time())
+    mid = await _run("INSERT INTO chat_messages(user_id, name, text, at) VALUES(?,?,?,?)", (uid, name, text, now))
+    if mid % 50 == 0:  # ba'zida eskilarini tozalab turamiz
+        await _run("DELETE FROM chat_messages WHERE id <= ?", (mid - CHAT_KEEP,))
+    return {"id": mid, "uid": uid, "name": name, "text": text, "at": now}
+
+
+async def chat_list(after: int = 0, limit: int = 50) -> list:
+    """after=0 — oxirgi `limit` ta xabar; after>0 — shundan keyingi yangilari."""
+    if after > 0:
+        return await _all("SELECT * FROM chat_messages WHERE id > ? ORDER BY id LIMIT ?", (after, limit))
+    rows = await _all("SELECT * FROM chat_messages ORDER BY id DESC LIMIT ?", (limit,))
+    return list(reversed(rows))
+
+
+async def chat_last_at(uid: int) -> int:
+    row = await _one("SELECT MAX(at) m FROM chat_messages WHERE user_id=?", (uid,))
+    return (row["m"] or 0) if row else 0
+
+
+async def chat_delete(mid: int) -> None:
+    await _run("DELETE FROM chat_messages WHERE id=?", (mid,))
 
 
 # ───────────── Sozlamalar ─────────────
