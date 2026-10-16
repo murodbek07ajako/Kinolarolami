@@ -248,6 +248,70 @@ async def cb_fav(c: CallbackQuery, bot: Bot):
         pass
 
 
+# ───────────── Qismli kontent: qismlar botning o'zida ─────────────
+async def _series_view(user_id: int, ser):
+    eps = await db.episodes(ser["id"])
+    watched = await db.watched_episodes(user_id, ser["id"])
+    seen = {w["mid"] for w in watched}
+    cont = None
+    if watched:
+        ids = [e["id"] for e in eps]
+        if watched[0]["mid"] in ids:
+            i = ids.index(watched[0]["mid"])
+            if i + 1 < len(eps):
+                cont = (eps[i + 1]["id"], f"▶ {eps[i + 1]['ep']}-qismdan davom etish")
+            else:
+                cont = (eps[i]["id"], f"🔁 {eps[i]['ep']}-qismni qayta ko'rish")
+    return eps, seen, cont
+
+
+async def show_series(bot: Bot, chat_id: int, user_id: int, ser) -> None:
+    eps, seen, cont = await _series_view(user_id, ser)
+    code = db.series_code(ser["kind"], ser["id"])
+    info = " · ".join(x for x in (ser["year"], (ser["genre"] or "").split(",")[0].strip()) if x)
+    text = (
+        f"{svc.KIND_EMOJI.get(ser['kind'], '📺')} <b>{html.escape(ser['title'])}</b>\n"
+        + (f"{html.escape(info)}\n" if info else "")
+        + f"🎞 <b>{len(eps)}</b> ta qism · kod: <code>{code}</code>\n\n"
+        "👇 Ko'rmoqchi bo'lgan qismni tanlang — u shu zahoti yuboriladi."
+    )
+    markup = kb.series_kb(ser["id"], eps, 0, seen, cont)
+    if ser["poster_id"]:
+        try:
+            await bot.send_photo(chat_id, ser["poster_id"], caption=text, reply_markup=markup)
+            return
+        except TelegramBadRequest:
+            pass
+    await bot.send_message(chat_id, text, reply_markup=markup)
+
+
+@router.callback_query(F.data == "noop")
+async def cb_noop(c: CallbackQuery):
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("ser:"))
+async def cb_series_page(c: CallbackQuery):
+    await c.answer()
+    _, sid, page = c.data.split(":")
+    ser = await db.get_series(int(sid))
+    if not ser:
+        return
+    eps, seen, cont = await _series_view(c.from_user.id, ser)
+    try:
+        await c.message.edit_reply_markup(reply_markup=kb.series_kb(ser["id"], eps, int(page), seen, cont))
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("sers:"))
+async def cb_series_open(c: CallbackQuery, bot: Bot):
+    await c.answer()
+    ser = await db.get_series(int(c.data.split(":")[1]))
+    if ser and await gate(bot, c):
+        await show_series(bot, c.message.chat.id, c.from_user.id, ser)
+
+
 # ───────────── Matn: kod yoki qidiruv ─────────────
 @router.message(StateFilter(default_state), F.text & ~F.text.startswith("/"))
 async def on_text(m: Message, bot: Bot):
@@ -273,14 +337,7 @@ async def on_text(m: Message, bot: Bot):
                 reply_markup=kb.open_catalog_kb(),
             )
             return
-        c = db.series_code(ser["kind"], ser["id"])
-        await m.answer(
-            f"{svc.KIND_EMOJI.get(ser['kind'], '📺')} <b>{html.escape(ser['title'])}</b> — "
-            f"<b>{len(eps)}</b> ta qism bor.\n\n"
-            f"Qismlarni ko'rish uchun <b>katalogni</b> oching: u yerda qidiruvga "
-            f"<code>{c}</code> deb yozing va kerakli qismni tanlang. 👇",
-            reply_markup=kb.catalog_query_kb(c),
-        )
+        await show_series(bot, m.chat.id, m.from_user.id, ser)
         return
     if q.isdigit():
         # Oddiy raqam faqat yakka kinoning kodi (1, 2, 3...). Serial/multfilm/anime qismlariga tegishli emas.

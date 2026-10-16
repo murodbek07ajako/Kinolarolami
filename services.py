@@ -91,7 +91,9 @@ async def send_movie(bot: Bot, chat_id: int, user_id: int, movie) -> None:
     me = await bot.me()
     protect = await db.get_setting("protect_content", "0") == "1"
     fav = await db.is_fav(user_id, movie["id"])
-    markup = kb.movie_kb(movie["id"], fav, me.username, movie["title"], episode=bool(movie["series_id"]))
+    nxt = await db.next_episode(movie["series_id"], movie["ep"] or 0) if movie["series_id"] else None
+    markup = kb.movie_kb(movie["id"], fav, me.username, movie["title"], episode=bool(movie["series_id"]),
+                         next_id=nxt["id"] if nxt else None, series_id=movie["series_id"])
     cap = caption(movie, me.username)
     if movie["file_type"] == "video":
         await bot.send_video(chat_id, movie["file_id"], caption=cap, reply_markup=markup,

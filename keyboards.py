@@ -50,14 +50,53 @@ def movies_kb(movies, menu: bool = True) -> InlineKeyboardMarkup:
     return _kb(rows)
 
 
-def movie_kb(movie_id: int, is_fav: bool, bot_username: str, title: str, episode: bool = False) -> InlineKeyboardMarkup:
+def movie_kb(movie_id: int, is_fav: bool, bot_username: str, title: str, episode: bool = False,
+             next_id: int | None = None, series_id: int | None = None) -> InlineKeyboardMarkup:
     link = f"https://t.me/{bot_username}?start=m_{movie_id}"
     share = f"https://t.me/share/url?url={quote(link)}&text={quote('🎬 ' + title)}"
     rows = [] if episode else [
         [B(text="💔 Saralanganlardan olib tashlash" if is_fav else "⭐ Saralanganlarga qo'shish",
            callback_data=f"fav:{movie_id}")],
     ]
+    if episode and next_id:
+        rows.append([B(text="⏭ Keyingi qism", callback_data=f"m:{next_id}")])
+    if episode and series_id:
+        rows.append([B(text="📺 Barcha qismlar", callback_data=f"sers:{series_id}")])
     rows.append([B(text="📤 Do'stlarga ulashish", url=share)])
+    w = webapp_button("🎞 Katalogni ochish")
+    if w:
+        rows.append([w])
+    return _kb(rows)
+
+
+EP_PAGE = 30
+
+
+def series_kb(sid: int, eps, page: int = 0, seen=frozenset(), cont=None) -> InlineKeyboardMarkup:
+    """Qismli kontent: qism raqamlari tugma bo'lib chiqadi, bosilsa qism darhol yuboriladi.
+    cont = (qism_id, matn) — «davom etish» tugmasi."""
+    pages = max((len(eps) - 1) // EP_PAGE + 1, 1)
+    page = min(max(page, 0), pages - 1)
+    rows: list[list[B]] = []
+    if cont:
+        rows.append([B(text=cont[1], callback_data=f"m:{cont[0]}")])
+    row: list[B] = []
+    for e in eps[page * EP_PAGE:(page + 1) * EP_PAGE]:
+        label = str(e["ep"] or "?")
+        row.append(B(text=("✅ " + label) if e["id"] in seen else label, callback_data=f"m:{e['id']}"))
+        if len(row) == 5:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    if pages > 1:
+        nav: list[B] = []
+        if page > 0:
+            nav.append(B(text="⬅️", callback_data=f"ser:{sid}:{page - 1}"))
+        nav.append(B(text=f"{page + 1}/{pages}", callback_data="noop"))
+        if page < pages - 1:
+            nav.append(B(text="➡️", callback_data=f"ser:{sid}:{page + 1}"))
+        rows.append(nav)
     w = webapp_button("🎞 Katalogni ochish")
     if w:
         rows.append([w])
