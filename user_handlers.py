@@ -278,6 +278,9 @@ async def on_text(m: Message, bot: Bot):
         if not await gate(bot, m, int(q)):
             return
         movie = await db.get_movie(int(q))
+        # Oddiy raqam faqat yakka kinoga tegishli: serial/multfilm/anime qismlari (series_id bor) kod bilan ochilmaydi
+        if movie and movie["series_id"]:
+            movie = None
         if not movie:
             await m.answer(
                 f"❌ <code>{html.escape(q)}</code> kodli kino topilmadi.\n\n"
