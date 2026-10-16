@@ -4,13 +4,17 @@ Kinoga muqova qo'yilmagan bo'lsa (Mini App'da logo chiqib turgan bo'lsa), bot in
 «<nom> <multfilm | anime | kino>» deb TIK (9:16 ga yaqin) rasm qidiradi, birinchi yaroqli natijani
 Telegramga yuklaydi va muqova qilib saqlaydi.
 
-Manbalar (ketma-ket): DuckDuckGo rasmlari → Bing rasmlari. Kalit (API key) kerak emas.
+Manbalar (ketma-ket):
+  1. anime  → AniList (kalitsiz, rasmiy)
+  2. hammasi → TMDB (rasmiy poster bazasi; .env da TMDB_API_KEY yoki TMDB_TOKEN kerak)
+  3. zaxira → DuckDuckGo / Bing rasmlari (kalitsiz, lekin beqarorroq)
 Hech narsa topilmasa kino o'zgarmaydi (logo qoladi) va keyingi safar yana urinib ko'riladi.
 """
 import asyncio
 import html
 import json
 import logging
+import os
 import re
 
 import aiohttp
@@ -31,10 +35,18 @@ TRIES = 6  # nechta nomzod rasm sinab ko'riladi
 _sem = asyncio.Semaphore(2)
 
 
-def build_query(title: str, kind: str) -> str:
+TMDB_KEY = os.getenv("TMDB_API_KEY", "").strip()
+TMDB_TOKEN = os.getenv("TMDB_TOKEN", "").strip()
+
+
+def clean_title(title: str) -> str:
     t = re.sub(r"\s*[-—–]\s*\d+\s*-?\s*qism.*$", "", title or "", flags=re.I)
     t = re.sub(r"[\[\(].*?[\]\)]", " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def build_query(title: str, kind: str) -> str:
+    t = clean_title(title)
     return f"{t} {SUFFIX.get(kind, 'kino')}"
 
 
@@ -84,9 +96,59 @@ def _order(cands: list[tuple]) -> list[tuple]:
     return tall + rest
 
 
-async def search_images(query: str) -> list[tuple]:
+async def _anilist(session: aiohttp.ClientSession, title: str, year: str) -> list[str]:
+    q = ("query($s:String){Page(perPage:6){media(search:$s,type:ANIME,sort:SEARCH_MATCH)"
+         "{coverImage{extraLarge large} startDate{year}}}}")
+    async with session.post("https://graphql.anilist.co", json={"query": q, "variables": {"s": title}}) as r:
+        data = await r.json(content_type=None)
+    media = (((data or {}).get("data") or {}).get("Page") or {}).get("media") or []
+    if year.isdigit():  # yili mos kelgani oldinga
+        media.sort(key=lambda m: (m.get("startDate") or {}).get("year") != int(year))
+    return [c for m in media for c in [(m.get("coverImage") or {}).get("extraLarge")
+                                      or (m.get("coverImage") or {}).get("large")] if c]
+
+
+async def _tmdb(session: aiohttp.ClientSession, title: str, year: str, kind: str) -> list[str]:
+    if not (TMDB_KEY or TMDB_TOKEN):
+        return []
+    params = {"query": title, "include_adult": "false", "language": "en-US"}
+    headers = {}
+    if TMDB_TOKEN:
+        headers["Authorization"] = f"Bearer {TMDB_TOKEN}"
+    else:
+        params["api_key"] = TMDB_KEY
+    async with session.get("https://api.themoviedb.org/3/search/multi", params=params, headers=headers) as r:
+        data = await r.json(content_type=None)
+    res = [x for x in (data or {}).get("results", [])
+           if x.get("poster_path") and x.get("media_type") in ("movie", "tv")]
+
+    def rank(x):
+        y = (x.get("release_date") or x.get("first_air_date") or "")[:4]
+        anim = 16 in (x.get("genre_ids") or [])
+        want_tv = kind == "serial"
+        return (
+            0 if (year.isdigit() and y == year) else 1,
+            0 if (anim == (kind in ("multfilm", "anime"))) else 1,
+            0 if ((x["media_type"] == "tv") == want_tv) else 1,
+        )
+    res.sort(key=rank)  # sort barqaror: qidiruv tartibi (mashhurlik) saqlanadi
+    return ["https://image.tmdb.org/t/p/w780" + x["poster_path"] for x in res]
+
+
+async def search_images(query: str, title: str = "", kind: str = "kino", year: str = "") -> list[tuple]:
     timeout = aiohttp.ClientTimeout(total=20)
     async with aiohttp.ClientSession(timeout=timeout, headers={"User-Agent": UA}) as s:
+        api = []
+        if title:
+            steps = [(_anilist, (title, year))] if kind == "anime" else []
+            steps.append((_tmdb, (title, year, kind)))
+            for fn, args in steps:
+                try:
+                    api += await fn(s, *args)
+                except Exception as e:
+                    logging.warning("Rasm qidirish (%s) xato: %s", fn.__name__, e)
+        if api:
+            return [(u, 0, 0) for u in api]  # rasmiy bazalar tartibi allaqachon saralangan
         for src in (_ddg, _bing):
             try:
                 found = _order(await src(s, query))
@@ -111,12 +173,12 @@ async def _download(session: aiohttp.ClientSession, url: str) -> bytes | None:
     return data
 
 
-async def find_cover(bot: Bot, title: str, kind: str) -> str | None:
+async def find_cover(bot: Bot, title: str, kind: str, year: str = "") -> str | None:
     """Rasmni topib Telegramga yuklaydi va file_id qaytaradi (topilmasa None)."""
     admins = sorted(perms.notify_ids())
     if not admins:
         return None
-    cands = await search_images(build_query(title, kind))
+    cands = await search_images(build_query(title, kind), clean_title(title), kind, year or "")
     if not cands:
         return None
     timeout = aiohttp.ClientTimeout(total=20)
@@ -145,7 +207,7 @@ async def ensure_movie(bot: Bot, movie_id: int) -> bool:
     if not mv or mv["cover_id"] or mv["series_id"]:  # qismlarning muqovasi serialda turadi
         return False
     async with _sem:
-        fid = await find_cover(bot, mv["title"], mv["kind"])
+        fid = await find_cover(bot, mv["title"], mv["kind"], mv["year"])
     if not fid:
         return False
     return await db.set_cover_if_empty(movie_id, fid)
@@ -156,7 +218,7 @@ async def ensure_series(bot: Bot, series_id: int) -> bool:
     if not ser or ser["cover_id"]:
         return False
     async with _sem:
-        fid = await find_cover(bot, ser["title"], ser["kind"])
+        fid = await find_cover(bot, ser["title"], ser["kind"], ser["year"])
     if not fid:
         return False
     return await db.set_series_cover_if_empty(series_id, fid)
