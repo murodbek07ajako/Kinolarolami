@@ -31,7 +31,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
 SUFFIX = {"multfilm": "multfilm", "anime": "anime"}  # boshqa hammasi (kino, serial) — «kino»
 MAX_IMG = 8 * 1024 * 1024
 MIN_IMG = 8 * 1024
-TRIES = 6  # nechta nomzod rasm sinab ko'riladi
+TRIES = 15  # nechta nomzod rasm sinab ko'riladi
 _sem = asyncio.Semaphore(2)
 
 
@@ -66,7 +66,7 @@ async def _ddg(session: aiohttp.ClientSession, q: str) -> list[tuple]:
     async with session.get("https://duckduckgo.com/i.js", params=params,
                            headers={"Referer": "https://duckduckgo.com/"}) as r:
         data = await r.json(content_type=None)
-    return [(x.get("image"), int(x.get("width") or 0), int(x.get("height") or 0))
+    return [(x.get("image"), int(x.get("width") or 0), int(x.get("height") or 0), x.get("title") or "")
             for x in data.get("results", []) if x.get("image")]
 
 
@@ -81,19 +81,66 @@ async def _bing(session: aiohttp.ClientSession, q: str) -> list[tuple]:
         except ValueError:
             continue
         if d.get("murl"):
-            out.append((d["murl"], 0, 0))  # Bing o'lchamni bermaydi — «tall» filtri o'zi saralaydi
+            out.append((d["murl"], 0, 0, d.get("t") or ""))  # Bing o'lchamni bermaydi — «tall» filtri o'zi saralaydi
     return out
 
 
-def _order(cands: list[tuple]) -> list[tuple]:
-    """Tik rasmlar oldinga (balandligi eniga ≥ 1.2×), so'ng qolganlari; tartib saqlanadi."""
-    seen, tall, rest = set(), [], []
-    for url, w, h in cands:
+def _words(t: str) -> set:
+    return {w for w in re.findall(r"\w+", (t or "").lower()) if len(w) > 2}
+
+
+def _order(cands: list[tuple], title: str = "") -> list[tuple]:
+    """Nom so'zlari rasm sarlavhasida bor bo'lganlar, tik (balandligi ≥ 1.3× eni) rasmlar oldinga."""
+    seen, out = set(), []
+    want = _words(title)
+    for url, w, h, t in cands:
         if url in seen or not url.startswith("http"):
             continue
         seen.add(url)
-        (tall if (w and h and h >= w * 1.2 and w >= 250) else rest).append((url, w, h))
-    return tall + rest
+        tall = 0 if (w and h and h >= w * 1.3 and w >= 250) else (1 if not (w and h) else 2)
+        match = 0 if (want and want & _words(t)) else 1
+        out.append((match, tall, len(out), (url, w, h, t)))
+    out.sort(key=lambda x: x[:3])
+    return [x[3] for x in out]
+
+
+def _dims(data: bytes):
+    """(eni, bo'yi) — JPEG/PNG/WEBP sarlavhasidan; aniqlab bo'lmasa None."""
+    try:
+        if data[:8] == b"\x89PNG\r\n\x1a\n":
+            return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+        if data[:3] == b"\xff\xd8\xff":
+            i = 2
+            while i + 9 < len(data):
+                if data[i] != 0xFF:
+                    i += 1
+                    continue
+                mk = data[i + 1]
+                if mk in (0xD8, 0x01) or 0xD0 <= mk <= 0xD7:
+                    i += 2
+                    continue
+                ln = int.from_bytes(data[i + 2:i + 4], "big")
+                if mk in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                    return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+                i += 2 + ln
+        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            k = data[12:16]
+            if k == b"VP8X":
+                return 1 + int.from_bytes(data[24:27], "little"), 1 + int.from_bytes(data[27:30], "little")
+            if k == b"VP8 ":
+                return int.from_bytes(data[26:28], "little") & 0x3FFF, int.from_bytes(data[28:30], "little") & 0x3FFF
+            if k == b"VP8L":
+                b = int.from_bytes(data[21:25], "little")
+                return (b & 0x3FFF) + 1, ((b >> 14) & 0x3FFF) + 1
+    except Exception:
+        pass
+    return None
+
+
+def is_portrait(data: bytes) -> bool:
+    """Faqat tik (9:16 / 2:3 ga yaqin) rasm yaroqli: bo'yi eniga nisbatan 1.3–2.2 marta."""
+    d = _dims(data)
+    return bool(d and d[0] >= 200 and 1.3 <= d[1] / d[0] <= 2.2)
 
 
 async def _anilist(session: aiohttp.ClientSession, title: str, year: str) -> list[str]:
@@ -148,10 +195,10 @@ async def search_images(query: str, title: str = "", kind: str = "kino", year: s
                 except Exception as e:
                     logging.warning("Rasm qidirish (%s) xato: %s", fn.__name__, e)
         if api:
-            return [(u, 0, 0) for u in api]  # rasmiy bazalar tartibi allaqachon saralangan
+            return [(u, 0, 0, "") for u in api]  # rasmiy bazalar tartibi allaqachon saralangan
         for src in (_ddg, _bing):
             try:
-                found = _order(await src(s, query))
+                found = _order(await src(s, query), title)
             except Exception as e:
                 logging.warning("Rasm qidirish (%s) xato: %s", src.__name__, e)
                 continue
@@ -185,7 +232,7 @@ async def _download(session: aiohttp.ClientSession, url: str) -> bytes | None:
     except Exception:
         return None
     data = bytes(buf)
-    if len(data) < MIN_IMG or not _image_type(data) or (want and len(data) != want) or not _complete(data):
+    if len(data) < MIN_IMG or not _image_type(data) or (want and len(data) != want) or not _complete(data) or not is_portrait(data):
         return None
     return data
 
@@ -200,7 +247,7 @@ async def find_cover(bot: Bot, title: str, kind: str, year: str = "") -> str | N
         return None
     timeout = aiohttp.ClientTimeout(total=20)
     async with aiohttp.ClientSession(timeout=timeout, headers={"User-Agent": UA}) as s:
-        for url, _, _ in cands[:TRIES]:
+        for url, *_ in cands[:TRIES]:
             data = await _download(s, url)
             if not data:
                 continue
