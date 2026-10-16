@@ -2,6 +2,7 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="/logo.png">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>Kino Katalog</title>
@@ -159,6 +160,14 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 .done h2{margin:0 0 8px;font-size:20px}
 .done p{margin:0 auto;max-width:320px;color:var(--muted);line-height:1.5;font-size:14px}
 .done .btn{width:100%;margin-top:22px}
+.poster.logo img{object-fit:contain;padding:18%}
+.cover{position:relative;aspect-ratio:16/9;margin:2px 16px 12px;border-radius:16px;overflow:hidden;background:linear-gradient(135deg,#2a1f4d,#15101f)}
+.cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .4s}
+.cover img.ok{opacity:1}
+.cover.logo img{object-fit:contain;padding:5%}
+.cvbox{margin:12px 0 4px}
+.cvbox .cover{margin:6px 0 4px}
+.cvbtns{display:flex;gap:8px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -248,20 +257,28 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   }
 
   /* ───────── Poster ───────── */
+  /* Rasm faqat shu ilova ichida: muqova bo'lsa — o'sha, bo'lmasa (yoki yuklanmasa) — logo */
+  const LOGO = '/logo.png';
+  const coverUrl = (m, type) => ((type || m.t) === 's' ? '/api/scover/' : '/api/cover/') + m.id + '?v=' + m.cv;
+  function coverImg(box, m, type) {
+    const img = new Image();
+    img.alt = ''; img.decoding = 'async';
+    img.onload = () => img.classList.add('ok');
+    const useLogo = () => { box.classList.add('logo'); img.onerror = () => img.remove(); img.src = LOGO; };
+    if (m && m.cv) { img.onerror = useLogo; img.src = coverUrl(m, type); } else useLogo();
+    box.appendChild(img);
+  }
+  const tint = m => { const hh = hue(m.id + (m.t === 's' ? 7 : 0)); return `linear-gradient(135deg,hsl(${hh} 55% 32%),hsl(${(hh + 55) % 360} 60% 20%))`; };
   function posterBox(m) {
     const box = el('div', 'poster');
-    const ph = el('div', 'ph', (m.title || '?').trim().charAt(0).toUpperCase());
-    const hh = hue(m.id + (m.t === 's' ? 7 : 0));
-    ph.style.background = `linear-gradient(135deg,hsl(${hh} 55% 32%),hsl(${(hh + 55) % 360} 60% 20%))`;
-    box.appendChild(ph);
-    if (m.poster) {
-      const img = new Image();
-      img.alt = ''; img.decoding = 'async';
-      img.onload = () => img.classList.add('ok');
-      img.onerror = () => img.remove();
-      img.src = (m.t === 's' ? '/api/sposter/' : '/api/poster/') + m.id;
-      box.appendChild(img);
-    }
+    box.style.background = tint(m);
+    coverImg(box, m);
+    return box;
+  }
+  function coverBanner(m) {
+    const box = el('div', 'cover');
+    box.style.background = tint(m);
+    coverImg(box, m);
     return box;
   }
 
@@ -430,8 +447,8 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   function renderSheet(m) {
     const isS = m.t === 's';
     sheet.replaceChildren(el('div', 'grab'));
+    sheet.appendChild(coverBanner(m));
     const hero = el('div', 'hero');
-    hero.appendChild(posterBox(m));
     const info = el('div', 'info');
     info.appendChild(el('h2', null, m.title));
     if (isS || m.kind !== 'kino') info.appendChild(el('span', 'tag', KIND_LABEL[m.kind] || m.kind));
@@ -593,6 +610,62 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 
   const KINDS = [['kino', '🎬 Kino'], ['multfilm', '🧸 Multfilm'], ['anime', '🎌 Anime'], ['serial', '📺 Serial']];
 
+  /* Rasmni kichraytirish (telefon rasmlari katta bo'ladi): 1280px gacha, JPEG */
+  async function shrinkImage(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image(); img.src = url; await img.decode();
+      const k = Math.min(1, 1280 / img.naturalWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const g = c.getContext('2d'); g.fillStyle = '#0b0b12'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('blob')), 'image/jpeg', 0.86));
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  /* Muqova rasmi: formaning eng tepasida. Faqat ilova ichida ko'rinadi; qo'yilmasa logo chiqadi.
+     F.cover — yashirin maydon: file_id; faqat o'zgargan bo'lsa (dataset.changed) serverga yuboriladi. */
+  function coverField(panel, F, init, opts) {
+    const box = el('div', 'cvbox');
+    box.appendChild(el('label', 'lbl', 'Muqova rasmi (ilova ichida tepada ko\'rinadi)'));
+    const prev = el('div', 'cover'); box.appendChild(prev);
+    const hid = el('input'); hid.type = 'hidden'; F.cover = hid;
+    const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
+    let state = init && init.cv ? 'saved' : 'none', blobUrl = '';
+    const pick = mkBtn('btn2', '', () => file.click());
+    const del = mkBtn('btn2', '🗑 Olib tashlash', () => { haptic(); hid.value = ''; hid.dataset.changed = '1'; state = 'none'; draw(); });
+    const draw = () => {
+      prev.replaceChildren(); prev.classList.remove('logo');
+      const m = state === 'saved' ? init : null;
+      if (state === 'new') {
+        const img = new Image(); img.alt = ''; img.onload = () => img.classList.add('ok'); img.src = blobUrl; prev.appendChild(img);
+      } else coverImg(prev, m, opts.coverType);
+      pick.textContent = state === 'none' ? '🖼 Rasm tanlash' : '🔄 Almashtirish';
+      del.hidden = state === 'none';
+    };
+    file.onchange = async () => {
+      const f = file.files[0]; file.value = ''; if (!f) return;
+      pick.disabled = true; pick.textContent = '⏳ Yuklanmoqda...';
+      try {
+        const blob = await shrinkImage(f);
+        const fd = new FormData(); fd.append('file', blob, 'cover.jpg');
+        const r = await fetch('/api/admin/cover', { method: 'POST', headers: { 'X-Init-Data': initData }, body: fd });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { const e = new Error(d.error || ''); e.msg = d.error || ''; throw e; }
+        hid.value = d.cover; hid.dataset.changed = '1';
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        blobUrl = URL.createObjectURL(blob); state = 'new';
+        haptic(); toast('✅ Rasm yuklandi. Oxirida «Saqlash» ni bosing.', 3000);
+      } catch (e) { toast(errMsg(e), 3800); }
+      finally { pick.disabled = false; draw(); }
+    };
+    const bar = el('div', 'cvbtns'); bar.append(pick, del);
+    const note = el('div', 'note', 'Rasm qo\'ymasangiz, logo avtomatik chiqadi.'); note.style.whiteSpace = 'normal';
+    box.append(bar, note, file);
+    panel.appendChild(box);
+    draw();
+  }
+
   /* Maydonlar bloki: nom, yil, (sifat), janr, davlat, til, tavsif. opts.noQuality — qismli kontent uchun */
   function movieForm(panel, init, opts = {}) {
     const F = {};
@@ -619,6 +692,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       return box;
     };
 
+    coverField(panel, F, init, opts);
     field('title', opts.titleLabel || 'Kino nomi', true, inp('Masalan: Qasoskor', { maxLength: 120 }));
     if (opts.noQuality) {
       field('year', 'Yili', false, inp('2024', { inputMode: 'numeric', maxLength: 4 }));
@@ -647,7 +721,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     if (y && !/^(18|19|20)\d{2}$/.test(y)) { toast('Yil noto\'g\'ri (masalan: 2024)'); F.year.focus(); return false; }
     return true;
   }
-  const readForm = F => { const b = {}; Object.keys(F).forEach(k => b[k] = F[k].value.trim()); return b; };
+  const readForm = F => { const b = {}; Object.keys(F).forEach(k => { if (k === 'cover' && !F.cover.dataset.changed) return; b[k] = F[k].value.trim(); }); return b; };
 
   /* Tur tanlash: chiplar + «Qismli» tugmasi (serial doim qismli) */
   function kindPicker(state, onChange) {
@@ -780,7 +854,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       admBody.replaceChildren(); adm.scrollTop = 0;
       const p = el('div', 'panel');
       p.appendChild(el('h3', null, '✏️ Tahrirlash (kod: ' + m.id + ')'));
-      const F = movieForm(p, m);
+      const F = movieForm(p, m, { coverType: 'm' });
       const bar = el('div', 'two'); bar.style.marginTop = '14px';
       const save = mkBtn('btn main', '💾 Saqlash', async () => {
         if (!validMeta(F)) return;
@@ -796,7 +870,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       admBody.replaceChildren(); adm.scrollTop = 0;
       const p = el('div', 'panel');
       p.appendChild(el('h3', null, '✏️ ' + sr.code + ' — tahrirlash'));
-      const F = movieForm(p, sr, { noQuality: true, titleLabel: 'Serial / to\'plam nomi' });
+      const F = movieForm(p, sr, { noQuality: true, titleLabel: 'Serial / to\'plam nomi', coverType: 's' });
       const bar = el('div', 'two'); bar.style.marginTop = '14px';
       const save = mkBtn('btn main', '💾 Saqlash', async () => {
         if (!validMeta(F)) return;

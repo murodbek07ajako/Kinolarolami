@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS movies(
   file_id TEXT NOT NULL,
   file_type TEXT NOT NULL DEFAULT 'video',
   poster_id TEXT NOT NULL DEFAULT '',
+  cover_id TEXT NOT NULL DEFAULT '',
   search_text TEXT NOT NULL DEFAULT '',
   views INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS series(
   country TEXT NOT NULL DEFAULT '',
   language TEXT NOT NULL DEFAULT '',
   poster_id TEXT NOT NULL DEFAULT '',
+  cover_id TEXT NOT NULL DEFAULT '',
   search_text TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   num INTEGER
@@ -139,6 +141,10 @@ async def _migrate() -> None:
     if "series_id" not in scols:
         await _db.execute("ALTER TABLE sources ADD COLUMN series_id INTEGER")
     sercols = {r["name"] for r in await _all("PRAGMA table_info(series)")}
+    if "cover_id" not in cols:
+        await _db.execute("ALTER TABLE movies ADD COLUMN cover_id TEXT NOT NULL DEFAULT ''")
+    if "cover_id" not in sercols:
+        await _db.execute("ALTER TABLE series ADD COLUMN cover_id TEXT NOT NULL DEFAULT ''")
     if "num" not in sercols:
         await _db.execute("ALTER TABLE series ADD COLUMN num INTEGER")
     # Raqami yo'q seriallarga HAR TUR uchun alohida tartib raqami beriladi: s.1, s.2 / m.1 / a.1 ...
@@ -280,14 +286,14 @@ async def add_movie(d: dict) -> int:
     return await _run(
         """INSERT INTO movies(title, description, year, genre, genre_lc, country, language, quality,
                               file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg, status,
-                              kind, series_id, ep)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                              kind, series_id, ep, cover_id)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""), genre_lc,
             d.get("country", ""), d.get("language", ""), d.get("quality", ""),
             d["file_id"], d.get("file_type", "video"), d.get("poster", ""), search, int(time.time()),
             d.get("src_chat"), d.get("src_msg"), d.get("status", "live"),
-            d.get("kind", "kino"), d.get("series_id"), d.get("ep"),
+            d.get("kind", "kino"), d.get("series_id"), d.get("ep"), d.get("cover", ""),
         ),
     )
 
@@ -318,6 +324,15 @@ async def replace_movie_meta(mid: int, d: dict) -> None:
         (cur["title"], cur["description"], cur["year"], cur["genre"], genre_lc, cur["country"],
          cur["language"], cur["quality"], search, mid),
     )
+
+
+async def set_cover(mid: int, cover_id: str) -> None:
+    """Mini App muqovasi (faqat ilova ichida ko'rinadi). Bo'sh qiymat = olib tashlash (logo chiqadi)."""
+    await _run("UPDATE movies SET cover_id=? WHERE id=?", (cover_id or "", mid))
+
+
+async def set_series_cover(sid: int, cover_id: str) -> None:
+    await _run("UPDATE series SET cover_id=? WHERE id=?", (cover_id or "", sid))
 
 
 async def set_poster(mid: int, poster_id: str) -> None:
@@ -396,10 +411,10 @@ async def add_series(d: dict) -> int:
         num = (await _one("SELECT COALESCE(MAX(num), 0) + 1 AS n FROM series WHERE kind=?", (kind,)))["n"]
         sid = await _run(
             """INSERT INTO series(kind, title, description, year, genre, genre_lc, country, language,
-                                  poster_id, search_text, created_at, num) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                  poster_id, search_text, created_at, num, cover_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (kind, d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""),
              genre_lc, d.get("country", ""), d.get("language", ""), d.get("poster", ""), search,
-             int(time.time()), num),
+             int(time.time()), num, d.get("cover", "")),
         )
         _NUM[sid] = num
         _BYNUM[(kind, num)] = sid
@@ -484,11 +499,11 @@ async def search_series(q: str, limit: int = 5):
 _ITEMS = """
 SELECT 'm' AS t, m.id AS id, m.id AS fk, m.title AS title, m.year AS year, m.genre AS genre, m.genre_lc AS genre_lc,
        m.country AS country, m.quality AS quality, m.views AS views, m.poster_id AS poster_id, m.kind AS kind,
-       m.search_text AS search_text, m.created_at AS created_at, 0 AS eps
+       m.search_text AS search_text, m.created_at AS created_at, 0 AS eps, m.cover_id AS cover_id
 FROM movies m WHERE m.status='live' AND m.series_id IS NULL
 UNION ALL
 SELECT 's', s.id, -s.id, s.title, s.year, s.genre, s.genre_lc, s.country, '', v.views, s.poster_id, s.kind,
-       s.search_text, v.last, v.n
+       s.search_text, v.last, v.n, s.cover_id
 FROM series s JOIN (
   SELECT series_id, SUM(views) AS views, MAX(created_at) AS last, COUNT(*) AS n
   FROM movies WHERE status='live' AND series_id IS NOT NULL GROUP BY series_id

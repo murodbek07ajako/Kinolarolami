@@ -51,3 +51,9 @@ Eski bazadagi seriallar ishga tushganda avtomatik shu tartibda qayta raqamlanadi
   va faqat belgilangan bo'limlar (kino, serial, anime, multfilm).
 
 **Hammaga xabar** (⚙️ Sozlama → 📣): matn, rasm yoki video (video 49 MB gacha). Hisobot botga keladi.
+
+**Muqova rasmi** (faqat Mini App ichida ko'rinadi, botdagi e'lonlarga tegmaydi):
+- Qo'shish/tahrirlash formasining eng tepasida rasm tanlanadi (telefon rasmi avtomatik kichraytiriladi).
+- Serial/multfilm/anime (qismli) — bitta muqova, serial yaratilganda yoki keyin tahrirlashda qo'yiladi.
+- Avto-yuklashdagi yakka kinolar muqovasiz tushadi, keyin tahrirlashda qo'yiladi.
+- Muqova qo'yilmagan joyda `logo.png` avtomatik chiqadi (logoni almashtirish uchun shu faylni almashtiring).

@@ -78,6 +78,11 @@ def _bad(msg: str) -> web.Response:
     return web.json_response({"error": msg}, status=400)
 
 
+def _cv(cover_id: str) -> str:
+    """Muqova versiyasi (brauzer keshini yangilash uchun). Muqova yo'q bo'lsa — bo'sh."""
+    return hashlib.md5(cover_id.encode()).hexdigest()[:8] if cover_id else ""
+
+
 def _brief(r) -> dict:
     """Katalog kartochkasi. t='m' — kino, t='s' — qismli (serial/multfilm/anime); fk — saralanganlar kaliti."""
     t = r["t"] if "t" in r.keys() else "m"
@@ -88,6 +93,7 @@ def _brief(r) -> dict:
         "title": r["title"], "year": r["year"], "genre": r["genre"],
         "country": r["country"], "quality": r["quality"], "views": r["views"],
         "poster": bool(r["poster_id"]),
+        "cv": _cv(r["cover_id"]) if "cover_id" in r.keys() else "",
     }
 
 
@@ -171,6 +177,7 @@ async def api_series(request: web.Request):
         "title": ser["title"], "year": ser["year"], "genre": ser["genre"], "country": ser["country"],
         "language": ser["language"], "description": ser["description"], "quality": "",
         "views": sum(e["views"] for e in eps), "poster": bool(ser["poster_id"]),
+        "cv": _cv(ser["cover_id"]),
         "eps": [{"id": e["id"], "ep": e["ep"], "views": e["views"], "live": e["status"] == "live"} for e in eps],
     })
 
@@ -216,6 +223,25 @@ async def api_sposter(request: web.Request):
     if not ser or not ser["poster_id"]:
         raise web.HTTPNotFound(reason="no poster")
     return await _poster_response(request, ser["poster_id"])
+
+
+async def api_cover(request: web.Request):
+    movie = await db.get_movie(int(request.match_info["id"]))
+    if not movie or not movie["cover_id"]:
+        raise web.HTTPNotFound(reason="no cover")
+    return await _poster_response(request, movie["cover_id"])
+
+
+async def api_scover(request: web.Request):
+    ser = await db.get_series(int(request.match_info["id"]))
+    if not ser or not ser["cover_id"]:
+        raise web.HTTPNotFound(reason="no cover")
+    return await _poster_response(request, ser["cover_id"])
+
+
+async def logo(request: web.Request):
+    """Muqova qo'yilmagan joylarda ko'rinadigan logo."""
+    return web.FileResponse(config.WEBAPP_DIR / "logo.png", headers={"Cache-Control": "public, max-age=604800"})
 
 
 # ───────────── Admin API ─────────────
@@ -371,7 +397,7 @@ async def api_admin_movie_get(request: web.Request):
     if not m:
         raise web.HTTPNotFound(reason="not found")
     _kind_ok(user, m["kind"])
-    return web.json_response({"movie": {"id": m["id"], **{k: m[k] or "" for k in db.META_FIELDS}}})
+    return web.json_response({"movie": {"id": m["id"], **{k: m[k] or "" for k in db.META_FIELDS}, "cv": _cv(m["cover_id"])}})
 
 
 async def api_admin_series_get(request: web.Request):
@@ -383,7 +409,7 @@ async def api_admin_series_get(request: web.Request):
     eps = await db.episodes(ser["id"], live_only=False)
     return web.json_response({
         "series": {"id": ser["id"], "kind": ser["kind"], "code": db.series_code(ser["kind"], ser["id"]),
-                   **{k: (ser[k] if k in ser.keys() else "") or "" for k in db.META_FIELDS}},
+                   **{k: (ser[k] if k in ser.keys() else "") or "" for k in db.META_FIELDS}, "cv": _cv(ser["cover_id"])},
         "eps": [{"id": e["id"], "ep": e["ep"], "live": e["status"] == "live"} for e in eps],
     })
 
@@ -401,6 +427,8 @@ async def api_admin_series_update(request: web.Request):
     except ValueError as e:
         return _bad(str(e))
     await db.update_series_meta(sid, d)
+    if "cover" in d:
+        await db.set_series_cover(sid, d["cover"])
     return web.json_response({"ok": True})
 
 
@@ -439,6 +467,8 @@ async def api_admin_movie_update(request: web.Request):
     except ValueError as e:
         return _bad(str(e))
     await db.replace_movie_meta(mid, d)
+    if "cover" in d:
+        await db.set_cover(mid, d["cover"])
     return web.json_response({"ok": True})
 
 
@@ -454,12 +484,21 @@ async def api_admin_movie_del(request: web.Request):
     return web.json_response({"ok": True})
 
 
+def _clean_cover(value) -> str:
+    v = str(value or "").strip()
+    if v and not re.fullmatch(r"[A-Za-z0-9_-]{20,250}", v):
+        raise ValueError("Muqova rasmi noto'g'ri. Qaytadan yuklang")
+    return v
+
+
 def _clean_meta(body: dict) -> dict:
     out = {}
     for key, limit in DRAFT_LIMITS.items():
         value = re.sub(r"[ \t]+", " ", str(body.get(key) or "")).strip()[:limit]
         if value:
             out[key] = value
+    if "cover" in body:  # bor bo'lsa: file_id (almashtirish) yoki bo'sh (olib tashlash)
+        out["cover"] = _clean_cover(body.get("cover"))
     if not out.get("title"):
         raise ValueError("Nomini kiriting")
     if out.get("year") and not re.fullmatch(r"(18|19|20)\d{2}", out["year"]):
@@ -645,6 +684,40 @@ async def api_admin_admin_del(request: web.Request):
     return web.json_response({"ok": True, **await _admins_payload(request, user["id"])})
 
 
+# ───────────── Muqova rasmi yuklash ─────────────
+MAX_COVER = 10 * 1024 * 1024
+
+
+async def api_admin_cover_upload(request: web.Request):
+    """Rasmni Telegramga yuklab, file_id qaytaradi (poster kabi saqlanadi). Kontentga formani saqlaganda ulanadi."""
+    user = _admin(request, "add")
+    data = None
+    reader = await request.multipart()
+    async for part in reader:
+        if part.name == "file" and part.filename:
+            if not (part.headers.get("Content-Type") or "").lower().startswith("image/"):
+                return _bad("Faqat rasm yuklash mumkin")
+            buf = bytearray()
+            while True:
+                chunk = await part.read_chunk(256 * 1024)
+                if not chunk:
+                    break
+                buf.extend(chunk)
+                if len(buf) > MAX_COVER:
+                    return _bad("Rasm 10 MB dan katta bo'lmasligi kerak")
+            data = bytes(buf) or None
+    if not data:
+        return _bad("Rasm tanlang")
+    try:
+        sent = await request.app["bot"].send_photo(
+            user["id"], BufferedInputFile(data, filename="cover.jpg"),
+            caption="🖼 Muqova rasmi saqlandi", disable_notification=True)
+    except TelegramAPIError as e:
+        logging.warning("Muqova yuklanmadi: %s", e)
+        return _bad("Rasm Telegramga yuklanmadi. Botga /start yozganingizni tekshiring.")
+    return web.json_response({"ok": True, "cover": sent.photo[-1].file_id})
+
+
 # ───────────── Hammaga xabar (matn / rasm / video) ─────────────
 MAX_VIDEO = 49 * 1024 * 1024   # Telegram bot yuklash chegarasi ~50 MB
 MAX_PHOTO = 10 * 1024 * 1024
@@ -704,11 +777,14 @@ def make_app(bot) -> web.Application:
     r = app.router
     r.add_get("/", index)
     r.add_get("/health", health)
+    r.add_get("/logo.png", logo)
     r.add_get("/api/me", api_me)
     r.add_get("/api/movies", api_movies)
     r.add_get(r"/api/movie/{id:\d+}", api_movie)
     r.add_get(r"/api/series/{id:\d+}", api_series)
     r.add_get(r"/api/sposter/{id:\d+}", api_sposter)
+    r.add_get(r"/api/cover/{id:\d+}", api_cover)
+    r.add_get(r"/api/scover/{id:\d+}", api_scover)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)
@@ -735,6 +811,7 @@ def make_app(bot) -> web.Application:
     r.add_post("/api/admin/admin", api_admin_admin_save)
     r.add_post("/api/admin/admin/delete", api_admin_admin_del)
     r.add_post("/api/admin/broadcast", api_admin_broadcast)
+    r.add_post("/api/admin/cover", api_admin_cover_upload)
     return app
 
 
