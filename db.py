@@ -547,12 +547,6 @@ async def set_episode_no(mid: int, ep: int) -> None:
     await _run("UPDATE movies SET ep=? WHERE id=?", (ep, mid))
 
 
-async def next_episode(sid: int, ep: int):
-    """Shu qismdan keyingi chiqarilgan qism (yo'q bo'lsa None)."""
-    return await _one(
-        "SELECT * FROM movies WHERE series_id=? AND status='live' AND ep>? ORDER BY ep LIMIT 1", (sid, ep))
-
-
 async def episode_by_no(sid: int, ep: int):
     return await _one("SELECT * FROM movies WHERE series_id=? AND ep=?", (sid, ep))
 
