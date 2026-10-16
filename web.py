@@ -19,6 +19,12 @@ import perms
 import services as svc
 
 SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
+THEMES = ("default", "newyear", "ramadan", "navruz")  # dizayn rejimlari
+
+
+async def _theme() -> str:
+    t = await db.get_setting("theme", "default")
+    return t if t in THEMES else "default"
 SINGLE_KINDS = ("kino", "multfilm", "anime")
 DRAFT_LIMITS = {"title": 120, "description": 800, "year": 4, "genre": 100, "country": 60, "language": 60, "quality": 20}
 
@@ -128,6 +134,7 @@ async def api_me(request: web.Request):
     name = (user.get("first_name") or "").strip() or "do'st"
     return web.json_response({
         "name": name,
+        "theme": await _theme(),
         "favs": await db.fav_ids(user["id"]),
         "admin": perms.is_staff(user["id"]),
         **perms.info(user["id"]),
@@ -276,6 +283,7 @@ async def api_admin_stats(request: web.Request):
 
 async def _settings_payload() -> dict:
     out = {k: (await db.get_setting(k, default)) == "1" for k, default in SETTING_DEFAULTS.items()}
+    out["theme"] = await _theme()
     out["channels"] = [
         {"id": r["id"], "title": r["title"] or str(r["chat_id"]), "link": r["link"]}
         for r in await db.list_channels()
@@ -304,6 +312,17 @@ async def api_admin_setting(request: web.Request):
         return _bad("Noma'lum sozlama")
     await db.set_setting(key, "1" if body.get("value") else "0")
     return web.json_response({"ok": True})
+
+
+async def api_admin_theme(request: web.Request):
+    """Dizayn rejimini tanlash — hamma foydalanuvchida shu dizayn ko'rinadi."""
+    _admin(request, "settings")
+    body = await request.json()
+    theme = body.get("theme")
+    if theme not in THEMES:
+        return _bad("Noma'lum dizayn")
+    await db.set_setting("theme", theme)
+    return web.json_response({"ok": True, "theme": theme})
 
 
 async def api_admin_channel_add(request: web.Request):
@@ -816,6 +835,7 @@ def make_app(bot) -> web.Application:
     r.add_get("/api/admin/stats", api_admin_stats)
     r.add_get("/api/admin/settings", api_admin_settings)
     r.add_post("/api/admin/setting", api_admin_setting)
+    r.add_post("/api/admin/theme", api_admin_theme)
     r.add_post("/api/admin/channel", api_admin_channel_add)
     r.add_post("/api/admin/source", api_admin_source_add)
     r.add_get("/api/admin/series", api_admin_series_list)
