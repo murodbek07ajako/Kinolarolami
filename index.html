@@ -585,7 +585,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     s.top.forEach((t, i) => {
       const r = el('div', 'row');
       r.appendChild(el('div', 'rank', String(i + 1)));
-      const g = el('div', 'grow'); g.appendChild(el('div', 'nm', t.title)); g.appendChild(el('div', 'sm', 'kod: ' + t.id));
+      const g = el('div', 'grow'); g.appendChild(el('div', 'nm', t.title)); g.appendChild(el('div', 'sm', 'kod: ' + (t.code || t.id)));
       r.appendChild(g); r.appendChild(el('div', 'sm', '👁 ' + t.views));
       top.appendChild(r);
     });
@@ -853,7 +853,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     function editView(m) {
       admBody.replaceChildren(); adm.scrollTop = 0;
       const p = el('div', 'panel');
-      p.appendChild(el('h3', null, '✏️ Tahrirlash (kod: ' + m.id + ')'));
+      p.appendChild(el('h3', null, '✏️ Tahrirlash (kod: ' + (m.code || m.id) + ')'));
       const F = movieForm(p, m, { coverType: 'm' });
       const bar = el('div', 'two'); bar.style.marginTop = '14px';
       const save = mkBtn('btn main', '💾 Saqlash', async () => {
@@ -1060,7 +1060,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
         const r = el('div', 'row');
         const gg = el('div', 'grow');
         gg.appendChild(el('div', 'nm', g.series ? it.ep + '-qism' : it.title + (it.year ? ' (' + it.year + ')' : '')));
-        gg.appendChild(el('div', 'sm', 'kod: ' + it.id + (it.genre && !g.series ? ' • ' + it.genre : '')));
+        gg.appendChild(el('div', 'sm', 'kod: ' + (it.code || it.id) + (it.genre && !g.series ? ' • ' + it.genre : '')));
         r.appendChild(gg);
         r.appendChild(mkBtn('ico', '🗑', async () => {
           if (!await confirmDlg('O\'chirilsinmi?')) return;

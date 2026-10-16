@@ -275,12 +275,10 @@ async def on_text(m: Message, bot: Bot):
         )
         return
     if q.isdigit():
-        if not await gate(bot, m, int(q)):
+        # Oddiy raqam faqat yakka kinoning kodi (1, 2, 3...). Serial/multfilm/anime qismlariga tegishli emas.
+        movie = await db.movie_by_num(int(q)) if len(q) < 10 else None
+        if not await gate(bot, m, movie["id"] if movie else 0):
             return
-        movie = await db.get_movie(int(q))
-        # Oddiy raqam faqat yakka kinoga tegishli: serial/multfilm/anime qismlari (series_id bor) kod bilan ochilmaydi
-        if movie and movie["series_id"]:
-            movie = None
         if not movie:
             await m.answer(
                 f"❌ <code>{html.escape(q)}</code> kodli kino topilmadi.\n\n"

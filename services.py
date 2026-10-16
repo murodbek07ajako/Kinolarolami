@@ -57,7 +57,7 @@ def code_of(movie) -> str:
     """Kino kodi: oddiy raqam; qismlilar uchun s.1 / m.1 / a.1."""
     if movie["series_id"]:
         return db.series_code(movie["kind"], movie["series_id"])
-    return str(movie["id"])
+    return str(movie["num"] or movie["id"])
 
 
 def caption(movie, bot_username: str) -> str:

@@ -208,7 +208,7 @@ async def cb_panel(c: CallbackQuery, state: FSMContext):
 async def cb_stats(c: CallbackQuery):
     s = await db.stats()
     top = "\n".join(
-        f"{i}. {html.escape(t['title'])} — <b>{t['views']}</b> 👁 (kod: <code>{t['id']}</code>)"
+        f"{i}. {html.escape(t['title'])} — <b>{t['views']}</b> 👁 (kod: <code>{t['num'] or t['id']}</code>)"
         for i, t in enumerate(s["top"], 1)
     ) or "—"
     text = (
@@ -333,7 +333,7 @@ async def announce_saved(m: Message, movie_id: int, data: dict) -> None:
         text = (
             "✅ <b>Kino qo'shildi!</b>\n\n"
             f"{emoji} <b>{title}</b>\n\n"
-            f"🔢 Kino kodi: <code>{movie_id}</code>\n"
+            f"🔢 Kino kodi: <code>{svc.code_of(await db.get_movie(movie_id))}</code>\n"
             f"🔗 Havola: <code>t.me/{me.username}?start=m_{movie_id}</code>"
         )
     await m.answer(text, reply_markup=kb.added_kb(movie_id))
@@ -446,7 +446,7 @@ async def cmd_poster(m: Message, command: CommandObject, state: FSMContext):
                               reply_markup=kb.cancel_kb())
     if not arg.isdigit():
         return await m.answer("Foydalanish: <code>/poster 12</code> yoki <code>/poster s.3</code> (kod)")
-    movie = await db.get_movie(int(arg))
+    movie = await db.movie_by_num(int(arg))
     if not movie:
         return await m.answer("❌ Bunday kodli kino topilmadi.")
     deny = _kind_denied(m.from_user.id, movie["kind"])
@@ -498,7 +498,7 @@ async def del_start(c: CallbackQuery, state: FSMContext):
 async def del_code(m: Message, state: FSMContext):
     if not (m.text and m.text.strip().isdigit()):
         return await m.answer("❗ Faqat raqam (kino kodi) yuboring.")
-    movie = await db.get_movie(int(m.text.strip()))
+    movie = await db.movie_by_num(int(m.text.strip()))
     if not movie:
         return await m.answer("❌ Bunday kodli kino topilmadi. Qayta yuboring:")
     deny = _kind_denied(m.from_user.id, movie["kind"])
@@ -506,7 +506,7 @@ async def del_code(m: Message, state: FSMContext):
         return await m.answer(deny)
     await state.clear()
     await m.answer(
-        f"❓ <b>{html.escape(movie['title'])}</b> (kod: <code>{movie['id']}</code>) o'chirilsinmi?",
+        f"❓ <b>{html.escape(movie['title'])}</b> (kod: <code>{svc.code_of(movie)}</code>) o'chirilsinmi?",
         reply_markup=kb.confirm_del_kb(movie["id"]),
     )
 
@@ -526,7 +526,7 @@ async def del_ok(c: CallbackQuery):
 @router.callback_query(F.data == "adm:list")
 async def cb_list(c: CallbackQuery):
     rows, total = await db.search_movies(limit=40)
-    lines = [f"<code>{r['id']}</code> — {html.escape(r['title'])}" + (f" ({r['year']})" if r["year"] else "")
+    lines = [f"<code>{r['num'] or r['id']}</code> — {html.escape(r['title'])}" + (f" ({r['year']})" if r["year"] else "")
              + f" • 👁{r['views']}" for r in rows]
     text = f"📋 <b>Kinolar</b> (jami: {total}, oxirgi {len(rows)} ta)\n\n" + ("\n".join(lines) or "Hozircha bo'sh.")
     await c.answer()
@@ -547,7 +547,7 @@ def pending_text(groups) -> str:
         else:
             lines.append(f"{names.get(g['kind'], '🎬 Kinolar')}: <b>{len(g['rows'])}</b> ta")
             for r in g["rows"][:15]:
-                lines.append(f"  • <code>{r['id']}</code> {html.escape(r['title'])}"
+                lines.append(f"  • <code>{r['num'] or r['id']}</code> {html.escape(r['title'])}"
                              + (f" ({r['year']})" if r["year"] else ""))
             if len(g["rows"]) > 15:
                 lines.append(f"  …va yana {len(g['rows']) - 15} ta")
