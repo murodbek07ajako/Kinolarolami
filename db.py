@@ -358,6 +358,32 @@ async def set_series_cover(sid: int, cover_id: str) -> None:
     await _run("UPDATE series SET cover_id=? WHERE id=?", (cover_id or "", sid))
 
 
+async def set_cover_if_empty(mid: int, cover_id: str) -> bool:
+    """Avto-topilgan muqovani faqat admin o'zi hali rasm qo'ymagan bo'lsa saqlaydi."""
+    cur = await _db.execute("UPDATE movies SET cover_id=? WHERE id=? AND cover_id=''", (cover_id, mid))
+    await _db.commit()
+    n = cur.rowcount
+    await cur.close()
+    return n > 0
+
+
+async def set_series_cover_if_empty(sid: int, cover_id: str) -> bool:
+    cur = await _db.execute("UPDATE series SET cover_id=? WHERE id=? AND cover_id=''", (cover_id, sid))
+    await _db.commit()
+    n = cur.rowcount
+    await cur.close()
+    return n > 0
+
+
+async def movies_without_cover():
+    """Muqovasiz yakka kinolar (qismlar serial muqovasidan foydalanadi)."""
+    return await _all("SELECT id FROM movies WHERE cover_id='' AND series_id IS NULL ORDER BY id DESC")
+
+
+async def series_without_cover():
+    return await _all("SELECT id FROM series WHERE cover_id='' ORDER BY id DESC")
+
+
 async def set_poster(mid: int, poster_id: str) -> None:
     await _run("UPDATE movies SET poster_id=? WHERE id=?", (poster_id, mid))
 

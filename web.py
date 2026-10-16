@@ -16,6 +16,7 @@ import config
 import db
 import broadcast
 import perms
+import posters
 import services as svc
 
 SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
@@ -328,6 +329,8 @@ async def api_admin_source_add(request: web.Request):
         if old and old["series_id"] and await db.get_series(old["series_id"]):
             return _bad("Bu kanal allaqachon boshqa serialga ulangan. Avval uni olib tashlang.")
         sid = await db.add_series({**meta, "kind": kind})
+        if not meta.get("cover"):
+            posters.spawn_series(request.app["bot"], sid)
         await db.add_source(chat_id, title, kind, sid)
     else:
         await db.add_source(chat_id, title, kind, None)
@@ -535,6 +538,8 @@ async def _clean_draft(body: dict, user: dict) -> dict:
     else:  # yangi serial yaratiladi (qismi chiqmaguncha katalogda ko'rinmaydi)
         meta = _clean_meta(body)
         sid = await db.add_series({**meta, "kind": kind})
+        if not meta.get("cover"):
+            posters.spawn_series(request.app["bot"], sid)
         ser = await db.get_series(sid)
     if await db.episode_by_no(sid, ep):
         raise ValueError(f"{ep}-qism allaqachon bor")

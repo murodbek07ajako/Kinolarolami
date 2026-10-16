@@ -21,6 +21,7 @@ import broadcast
 import caption_parser as cp
 import db
 import keyboards as kb
+import posters
 import services as svc
 
 router = Router()
@@ -119,6 +120,8 @@ async def import_episode(bot: Bot, series, media, ftype: str, caption: str | Non
         return "dup"
     if thumb and not series["poster_id"]:
         await db.set_series_poster(series["id"], thumb)
+    if not series["cover_id"]:
+        posters.spawn_series(bot, series["id"])  # muqova yo'q — nom bo'yicha internetdan topiladi
     backup.schedule(bot)
     queue_notice(bot, f"{series['title']} — {ep}-qism", noposter_id=None if (thumb or series["poster_id"]) else movie_id)
     return "added"
@@ -164,6 +167,7 @@ async def import_media(bot: Bot, media, ftype: str, caption: str | None,
     except sqlite3.IntegrityError:  # parallel yangilanish: shu post allaqachon qo'shilgan
         return "dup"
     backup.schedule(bot)
+    posters.spawn_movie(bot, movie_id)  # muqova yo'q — nom bo'yicha internetdan topiladi
     queue_notice(bot, data["title"], noposter_id=None if thumb else movie_id)
     return "added"
 

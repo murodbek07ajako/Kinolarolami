@@ -15,6 +15,7 @@ import backup
 import config
 import db
 import perms
+import posters
 import user_handlers as user
 import web
 
@@ -51,6 +52,7 @@ async def setup_bot(bot: Bot) -> None:
                 [BotCommand(command="admin", description="👨‍💻 Admin panel"),
                  BotCommand(command="start", description="🏠 Bosh menyu"),
                  BotCommand(command="poster", description="🖼 Poster o'zgartirish"),
+                 BotCommand(command="rasmlar", description="🔎 Muqovasizlarga rasm topish"),
                  BotCommand(command="cancel", description="❌ Bekor qilish")],
                 scope=BotCommandScopeChat(chat_id=admin_id),
             )
@@ -104,10 +106,13 @@ async def main() -> None:
             except Exception:
                 pass
     backup_task = asyncio.create_task(backup.periodic(bot))
+    # Ishga tushganda muqovasiz (logoli) kinolarga rasm qidiramiz — fonda, bot ishlashiga xalaqit bermaydi
+    cover_task = asyncio.create_task(posters.backfill(bot, notify=False))
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         backup_task.cancel()
+        cover_task.cancel()
         await runner.cleanup()
         await db.close()
         await bot.session.close()
