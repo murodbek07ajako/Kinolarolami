@@ -160,15 +160,32 @@ async def search_images(query: str, title: str = "", kind: str = "kino", year: s
     return []
 
 
+def _complete(data: bytes) -> bool:
+    """Rasm oxirigacha yuklanganini tekshiradi (yarim yuklangan rasm — «yarmi ochilmagan» bo'lib qoladi)."""
+    if data[:3] == b"\xff\xd8\xff":
+        return data.rstrip(b"\x00")[-2:] == b"\xff\xd9"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return data[-12:-8] == b"\x00\x00\x00\x00" and data[-8:-4] == b"IEND"
+    if data[:4] == b"RIFF":
+        return int.from_bytes(data[4:8], "little") + 8 <= len(data)
+    return False
+
+
 async def _download(session: aiohttp.ClientSession, url: str) -> bytes | None:
     try:
         async with session.get(url) as r:
             if r.status != 200 or not (r.headers.get("Content-Type", "")).lower().startswith("image/"):
                 return None
-            data = await r.content.read(MAX_IMG + 1)
+            buf = bytearray()
+            async for chunk in r.content.iter_chunked(64 * 1024):  # hammasi oxirigacha o'qiladi
+                buf.extend(chunk)
+                if len(buf) > MAX_IMG:
+                    return None
+            want = int(r.headers.get("Content-Length") or 0)
     except Exception:
         return None
-    if len(data) > MAX_IMG or len(data) < MIN_IMG or not _image_type(data):
+    data = bytes(buf)
+    if len(data) < MIN_IMG or not _image_type(data) or (want and len(data) != want) or not _complete(data):
         return None
     return data
 
