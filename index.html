@@ -357,6 +357,71 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 .th .qchips button{color:#8f98b5}
 .th .qchips button.on{color:#fff}
 .th .qchips button:disabled{opacity:.35}
+/* ── Moderatsiya ── */
+.cdots{display:inline-flex;align-items:center;justify-content:center;width:26px;height:18px;opacity:.7;color:inherit}
+.cdots svg{width:18px;height:18px}
+.msh{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.62);display:flex;align-items:flex-end;opacity:0;transition:opacity .2s}
+.msh.on{opacity:1}
+.msh-box{width:100%;max-height:86%;overflow:auto;background:var(--bg2);color:var(--text);border-radius:24px 24px 0 0;border-top:1px solid var(--line);padding:10px 14px calc(18px + env(safe-area-inset-bottom));transform:translateY(40px);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+.msh.on .msh-box{transform:none}
+.msh-grab{width:42px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 12px}
+.msh-user{display:flex;align-items:center;gap:12px;padding:2px 2px 6px}
+.msh-av{flex:none;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:#fff}
+.msh-nm{font-weight:800;font-size:15px}
+.msh-pv{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62vw}
+.mstat{display:flex;gap:6px;flex-wrap:wrap;margin:6px 2px 2px}
+.mstat span{padding:4px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.mstat .m{background:rgba(255,176,32,.16);color:#ffb020}
+.mstat .b{background:rgba(255,59,48,.16);color:#ff5a52}
+.mact{display:flex;align-items:center;gap:14px;width:100%;padding:12px;border-radius:16px;background:var(--card);border:1px solid var(--line);margin-top:9px;text-align:left;font-weight:700;font-size:15px;color:var(--text);transition:transform .12s}
+.mact:active{transform:scale(.98)}
+.mact .mi{flex:none;width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center}
+.mact .mi svg{width:22px;height:22px}
+.mact small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:2px}
+.mact.del .mi{background:rgba(120,140,255,.16);color:#8fa3ff}
+.mact.mute .mi{background:rgba(255,176,32,.16);color:#ffb020}
+.mact.ban .mi{background:rgba(255,59,48,.16);color:#ff5a52}
+.mact.ok .mi{background:rgba(46,204,113,.16);color:#2ecc71}
+.mhd{display:flex;align-items:center;gap:10px;margin:2px 0 4px}
+.mhd .mi{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center}
+.mhd .mi svg{width:21px;height:21px}
+.mhd.mute .mi{background:rgba(255,176,32,.16);color:#ffb020}
+.mhd.ban .mi{background:rgba(255,59,48,.16);color:#ff5a52}
+.mhd b{flex:1;font-size:17px}
+.mback{width:36px;height:36px;border-radius:12px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--text)}
+.mback svg{width:20px;height:20px}
+.mdesc{color:var(--muted);font-size:12.5px;margin:2px 2px 0}
+.mchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.mchips button{padding:13px 2px;border-radius:13px;background:var(--card);border:1px solid var(--line);font-weight:800;font-size:13.5px;color:var(--text)}
+.mchips button.on{background:var(--grad);color:var(--onacc);border-color:transparent;box-shadow:0 4px 14px rgba(var(--a1rgb),.35)}
+.mgo{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:14px;border-radius:15px;font-weight:800;font-size:15.5px;color:#fff}
+.mgo svg{width:20px;height:20px}
+.mgo.mute{background:linear-gradient(135deg,#ffb020,#ff8a00)}
+.mgo.ban{background:linear-gradient(135deg,#ff5a52,#d4271f)}
+.mgo:disabled{opacity:.5}
+.banscr{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;gap:10px}
+.banscr .bi{width:92px;height:92px;border-radius:50%;background:rgba(255,59,48,.14);color:#ff5a52;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.banscr .bi svg{width:50px;height:50px}
+.banscr h2{margin:0;font-size:22px}
+.banscr p{margin:0;color:var(--muted);font-size:14px;max-width:300px}
+.banscr .bt{margin-top:6px;padding:9px 18px;border-radius:99px;background:rgba(255,59,48,.14);color:#ff5a52;font-weight:800;font-size:14px}
+.sec-t{font-weight:800;font-size:13.5px;margin:18px 2px 8px}
+.sec-t:first-child{margin-top:4px}
+.stat.today b{color:var(--a1)}
+.stat.tap{display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;transition:transform .12s,border-color .2s}
+.stat.tap:active{transform:scale(.98)}
+.stat.tap.on{border-color:var(--a1)}
+.stat.tap .ic{flex:none;width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center}
+.stat.tap .ic svg{width:21px;height:21px}
+.ic.m{background:rgba(255,176,32,.16);color:#ffb020}
+.ic.b{background:rgba(255,59,48,.16);color:#ff5a52}
+.pun-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.pun-row:first-of-type{border-top:0}
+.pun-t{display:inline-block;margin-top:3px;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:700}
+.pun-t.m{background:rgba(255,176,32,.16);color:#ffb020}
+.pun-t.b{background:rgba(255,59,48,.16);color:#ff5a52}
+.pun-x{flex:none;display:flex;align-items:center;gap:6px;padding:9px 12px;border-radius:12px;background:rgba(46,204,113,.14);color:#2ecc71;font-weight:800;font-size:13px}
+.pun-x svg{width:16px;height:16px}
 </style>
 
 </head>
@@ -479,6 +544,102 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), ms);
   }
 
+  /* ───────── Ikonkalar, ban ekrani, moderatsiya oynasi ───────── */
+  const SV = p => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+  const ICON = {
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+    trash: SV('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/>'),
+    mute: SV('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/>'),
+    ban: SV('<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>'),
+    check: SV('<path d="M5 13l4 4L19 7"/>'),
+    back: SV('<path d="M15 6l-6 6 6 6"/>'),
+  };
+  const ico = (name, cls) => { const s = el('span', cls); s.innerHTML = ICON[name]; return s; };  // faqat o'zimizning doimiy SVG matnlari
+  const FOREVER_TS = 4102444799;
+  const fmtLeft = sec => {
+    if (sec >= FOREVER_TS - Date.now() / 1000 - 5) return 'umrbod';
+    let mins = Math.max(Math.ceil(sec / 60), 1);
+    const d = Math.floor(mins / 1440), h = Math.floor(mins % 1440 / 60), m = mins % 60, p = [];
+    if (d) p.push(d + ' kun'); if (h) p.push(h + ' soat'); if (m || !p.length) p.push((m || 1) + ' daqiqa');
+    return p.slice(0, 2).join(' ');
+  };
+  function banScreen(until) {
+    if (document.getElementById('banScr')) return;
+    const w = el('div', 'banscr'); w.id = 'banScr';
+    w.appendChild(ico('ban', 'bi')); w.appendChild(el('h2', '', 'Siz bloklangansiz'));
+    w.appendChild(el('p', '', 'Sizga bot va katalogdan foydalanish vaqtincha cheklangan.'));
+    w.appendChild(el('div', 'bt', until >= FOREVER_TS ? 'Muddat: umrbod' : 'Qolgan vaqt: ' + fmtLeft(until - Date.now() / 1000)));
+    w.appendChild(el('p', '', 'Savollar bo\'lsa, admin bilan bog\'laning.'));
+    document.body.appendChild(w);
+  }
+  const MOD_TIMES = [[30, '30 daq'], [60, '1 soat'], [120, '2 soat'], [180, '3 soat'], [360, '6 soat'], [720, '12 soat'], [1440, '1 kun'], [0, 'Umrbod']];
+
+  /* ⋯ menyusi: xabarni o'chirish / mute / ban (scope: 'main' — umumiy chat, 'theatre' — teatr chati) */
+  function modSheet(m, scope, onDeleted) {
+    const wrap = el('div', 'msh'), box = el('div', 'msh-box'); wrap.appendChild(box);
+    const close = () => { wrap.classList.remove('on'); setTimeout(() => wrap.remove(), 200); };
+    wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+    document.body.appendChild(wrap); requestAnimationFrame(() => wrap.classList.add('on')); haptic();
+    const canPun = can('ban') && !m.staff;
+    let st = { mute: 0, ban: 0 };
+    const act = (cls, icon, title, sub, fn) => {
+      const b = el('button', 'mact ' + cls); b.appendChild(ico(icon, 'mi'));
+      const t = el('div'); t.appendChild(el('div', '', title)); t.appendChild(el('small', '', sub)); b.appendChild(t);
+      b.onclick = () => { haptic(); fn(); }; box.appendChild(b);
+    };
+    function home() {
+      box.replaceChildren(); box.appendChild(el('div', 'msh-grab'));
+      const u = el('div', 'msh-user'), av = el('div', 'msh-av', (m.name || '?').trim().charAt(0).toUpperCase());
+      av.style.background = 'hsl(' + nameHue(m.uid) + ',55%,45%)';
+      const t = el('div'); t.appendChild(el('div', 'msh-nm', m.name)); t.appendChild(el('div', 'msh-pv', m.text));
+      u.append(av, t); box.appendChild(u);
+      const now = Date.now() / 1000;
+      if (st.mute > now || st.ban > now) {
+        const s = el('div', 'mstat');
+        if (st.mute > now) s.appendChild(el('span', 'm', 'Mute: ' + fmtLeft(st.mute - now)));
+        if (st.ban > now) s.appendChild(el('span', 'b', 'Ban: ' + fmtLeft(st.ban - now)));
+        box.appendChild(s);
+      }
+      act('del', 'trash', 'Xabarni o\'chirish', 'Chatdan butunlay olib tashlanadi', async () => {
+        try { await api('/api/chat/mod', { action: 'delete', scope, id: m.id }); close(); onDeleted(); toast('Xabar o\'chirildi'); }
+        catch (e) { toast(errMsg(e)); }
+      });
+      if (!canPun) return;
+      if (st.mute > now) act('ok', 'check', 'Mute ni olib tashlash', 'Yana ' + fmtLeft(st.mute - now) + ' qolgan', () => lift('unmute', 'Mute olib tashlandi'));
+      else act('mute', 'mute', 'Mute', 'Chatda yoza olmaydi, faqat o\'qiydi', () => pick('mute'));
+      if (st.ban > now) act('ok', 'check', 'Ban ni olib tashlash', 'Yana ' + fmtLeft(st.ban - now) + ' qolgan', () => lift('unban', 'Ban olib tashlandi'));
+      else act('ban', 'ban', 'Ban', 'Bot va katalogga umuman kirolmaydi', () => pick('ban'));
+    }
+    async function lift(action, msg) {
+      try { await api('/api/chat/mod', { action, uid: m.uid }); toast(msg); st = await api('/api/admin/punish?uid=' + m.uid); home(); }
+      catch (e) { toast(errMsg(e)); }
+    }
+    function pick(kind) {
+      let sel = 60; box.replaceChildren(); box.appendChild(el('div', 'msh-grab'));
+      const hd = el('div', 'mhd ' + kind), bk = el('button', 'mback'); bk.innerHTML = ICON.back; bk.onclick = home;
+      hd.append(bk, el('b', '', kind === 'mute' ? 'Mute muddati' : 'Ban muddati')); box.appendChild(hd);
+      box.appendChild(el('div', 'mdesc', m.name + (kind === 'mute' ? ' — chatda yoza olmaydi (o\'z xonasidan tashqari)' : ' — bot va katalogga kira olmaydi')));
+      const ch = el('div', 'mchips');
+      MOD_TIMES.forEach(([min, label]) => {
+        const b = el('button', min === sel ? 'on' : '', label);
+        b.onclick = () => { haptic(); sel = min; ch.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+        ch.appendChild(b);
+      });
+      box.appendChild(ch);
+      const go = el('button', 'mgo ' + kind); go.appendChild(ico(kind, '')); go.appendChild(document.createTextNode(kind === 'mute' ? 'Mute qilish' : 'Ban qilish'));
+      go.onclick = async () => {
+        go.disabled = true;
+        try {
+          await api('/api/chat/mod', sel === 0 ? { action: kind, uid: m.uid, forever: true } : { action: kind, uid: m.uid, minutes: sel });
+          haptic('medium'); close(); toast((kind === 'mute' ? 'Mute qilindi' : 'Ban qilindi') + ': ' + MOD_TIMES.find(x => x[0] === sel)[1].toLowerCase());
+        } catch (e) { toast(errMsg(e)); go.disabled = false; }
+      };
+      box.appendChild(go);
+    }
+    home();
+    if (canPun) api('/api/admin/punish?uid=' + m.uid).then(s => { st = s; if (box.querySelector('.mact')) home(); }).catch(() => {});
+  }
+
   async function api(path, body) {
     const r = await fetch(path, {
       method: body !== undefined ? 'POST' : 'GET',
@@ -486,8 +647,9 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     if (!r.ok) {
-      let msg = '';
-      try { msg = (await r.json()).error || ''; } catch (e) {}
+      let msg = '', j = {};
+      try { j = await r.json(); msg = j.error || ''; } catch (e) {}
+      if (r.status === 403 && msg === 'ban') banScreen(j.until || FOREVER_TS);
       const e = new Error(msg || 'http ' + r.status); e.status = r.status; e.msg = msg; throw e;
     }
     return r.json();
@@ -993,12 +1155,65 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   TABS.stats = async () => {
     const s = await api('/api/admin/stats');
     const wrap = el('div');
+    const pair = (title, today, total, todayLabel) => {
+      wrap.appendChild(el('div', 'sec-t', title));
+      const g = el('div', 'stat-grid');
+      [[todayLabel || 'Bugun', today, 'stat today'], ['Jami', total, 'stat']].forEach(([label, val, cls]) => {
+        const c = el('div', cls); c.appendChild(el('b', null, String(val))); c.appendChild(el('span', null, label)); g.appendChild(c);
+      });
+      wrap.appendChild(g);
+    };
+    pair('👥 Obunachilar', s.users_today, s.users, 'Bugun qo\'shilgan');
+    pair('👁 Ko\'rishlar', s.views_today, s.views, 'Bugungi');
+    pair('🎬 Yuklangan kinolar', s.movies_today, s.movies_all, 'Bugun yuklangan');
+
+    if (can('ban')) {
+      wrap.appendChild(el('div', 'sec-t', '🛡 Jazolar'));
+      const g = el('div', 'stat-grid'), listBox = el('div'); let open = '';
+      const cards = {};
+      [['mute', 'm', 'Mute list', s.muted], ['ban', 'b', 'Ban list', s.banned]].forEach(([kind, cls, label, n]) => {
+        const c = el('div', 'stat tap'); c.appendChild(ico(kind, 'ic ' + cls));
+        const t = el('div'); const num = el('b', null, String(n)); t.appendChild(num); t.appendChild(el('span', null, label)); c.appendChild(t);
+        c._num = num; cards[kind] = c;
+        c.onclick = () => { haptic(); open = open === kind ? '' : kind; Object.entries(cards).forEach(([k, x]) => x.classList.toggle('on', k === open)); showList(); };
+        g.appendChild(c);
+      });
+      wrap.appendChild(g); wrap.appendChild(listBox);
+      async function showList() {
+        listBox.replaceChildren(); if (!open) return;
+        const kind = open, p = el('div', 'panel'); p.appendChild(el('h3', null, kind === 'mute' ? '🔇 Mute qilinganlar' : '🚫 Ban qilinganlar'));
+        listBox.appendChild(p); p.appendChild(el('div', 'note', '⏳ Yuklanmoqda...'));
+        try {
+          const d = await api('/api/admin/punished'); p.lastChild.remove();
+          const items = d[kind];
+          if (!items.length) p.appendChild(el('div', 'note', 'Ro\'yxat bo\'sh.'));
+          items.forEach(u => {
+            const r = el('div', 'pun-row'), gr = el('div', 'grow');
+            gr.appendChild(el('div', 'nm', u.name || ('ID ' + u.uid)));
+            gr.appendChild(el('div', 'sm', (u.username ? '@' + u.username + ' · ' : '') + 'ID ' + u.uid));
+            const left = u.until - Date.now() / 1000;
+            gr.appendChild(el('span', 'pun-t ' + (kind === 'mute' ? 'm' : 'b'), fmtLeft(left) === 'umrbod' ? 'Umrbod' : 'Qoldi: ' + fmtLeft(left)));
+            const x = el('button', 'pun-x'); x.appendChild(ico('check', '')); x.appendChild(document.createTextNode('Olib tashlash'));
+            x.onclick = async () => {
+              x.disabled = true;
+              try {
+                await api('/api/chat/mod', { action: kind === 'mute' ? 'unmute' : 'unban', uid: u.uid }); haptic('medium'); r.remove();
+                cards[kind]._num.textContent = String(Math.max(0, +cards[kind]._num.textContent - 1));
+                toast(kind === 'mute' ? 'Mute olib tashlandi' : 'Ban olib tashlandi');
+                if (!p.querySelector('.pun-row')) p.appendChild(el('div', 'note', 'Ro\'yxat bo\'sh.'));
+              } catch (e) { toast(errMsg(e)); x.disabled = false; }
+            };
+            r.append(gr, x); p.appendChild(r);
+          });
+        } catch (e) { p.lastChild.textContent = errMsg(e); }
+      }
+    }
+
+    wrap.appendChild(el('div', 'sec-t', '📊 Boshqa ko\'rsatkichlar'));
     const grid = el('div', 'stat-grid');
     [
-      ['👥 Foydalanuvchilar', s.users], ['🆕 Bugun qo\'shilgan', s.new_day],
       ['🟢 24 soatda faol', s.active_day], ['📅 7 kunda qo\'shilgan', s.new_week],
-      ['🎬 Kinolar', s.movies], ['📺 Qismli kontent', s.series || 0],
-      ['👁 Jami ko\'rishlar', s.views], ['📈 Bugungi ko\'rishlar', s.views_day],
+      ['🎬 Faol kinolar', s.movies], ['📺 Qismli kontent', s.series || 0],
       ['⏳ Kutilmoqda', s.pending], ['📢 Kanallar', s.channels],
     ].forEach(([label, val]) => {
       const c = el('div', 'stat'); c.appendChild(el('b', null, String(val))); c.appendChild(el('span', null, label)); grid.appendChild(c);
@@ -1760,11 +1975,8 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     b.appendChild(el('div', 'ct', m.text));
     const meta = el('div', 'cm', hhmm(m.at));
     if (CH.staff) {
-      const d = el('button', 'cdel', '🗑');
-      d.onclick = async () => {
-        if (!confirm('Xabar o\'chirilsinmi?')) return;
-        try { await api('/api/chat/delete', { id: m.id }); b.remove(); chatEmpty(); } catch (e) { toast(errMsg(e)); }
-      };
+      const d = el('button', 'cdots'); d.setAttribute('aria-label', 'Amallar'); d.innerHTML = ICON.dots;
+      d.onclick = () => modSheet(m, 'main', () => { b.remove(); chatEmpty(); });
       meta.prepend(d);
     }
     b.appendChild(meta);
@@ -1955,8 +2167,8 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       b.appendChild(el('div', 'ct', m.text));
       const meta = el('div', 'cm', hhmm(m.at));
       if (CH.staff) {
-        const d = el('button', 'cdel', '🗑');
-        d.onclick = async () => { try { await api('/api/theatre/chat/delete', { id: m.id }); b.remove(); empty(); } catch (e) { toast(errMsg(e)); } };
+        const d = el('button', 'cdots'); d.setAttribute('aria-label', 'Amallar'); d.innerHTML = ICON.dots;
+        d.onclick = () => modSheet(m, 'theatre', () => { b.remove(); empty(); });
         meta.prepend(d);
       }
       b.appendChild(meta); return b;

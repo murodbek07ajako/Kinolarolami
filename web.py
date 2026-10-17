@@ -120,6 +120,19 @@ async def errors(request: web.Request, handler):
         return web.json_response({"error": "server"}, status=500)
 
 
+@web.middleware
+async def ban_guard(request: web.Request, handler):
+    """Ban qilingan foydalanuvchi katalogning hech bir API siga kira olmaydi."""
+    if request.path.startswith("/api/"):
+        raw = request.headers.get("X-Init-Data") or request.query.get("a", "")
+        user = verify_init_data(raw, config.BOT_TOKEN) if raw else None
+        if user and not perms.is_staff(user["id"]):
+            until = await db.ban_until(user["id"])
+            if until is not None:
+                return web.json_response({"error": "ban", "until": until}, status=403)
+    return await handler(request)
+
+
 # ───────────── Sahifalar ─────────────
 async def index(request: web.Request):
     return web.FileResponse(config.WEBAPP_DIR / "index.html", headers={"Cache-Control": "no-cache"})
@@ -148,6 +161,18 @@ def _chat_item(r, viewer_id: int) -> dict:
             "at": r["at"], "mine": r["user_id"] == viewer_id, "staff": perms.is_staff(r["user_id"])}
 
 
+async def _muted_resp(user: dict, room_owner: int | None = None):
+    """Mute qilingan bo'lsa — javob (yozish taqiqlangan). `room_owner`: o'z xonasida yozish mumkin."""
+    if perms.is_staff(user["id"]) or room_owner == user["id"]:
+        return None
+    until = await db.mute_until(user["id"])
+    if until is None:
+        return None
+    left = db.fmt_left(until)
+    text = "🔇 Siz chatda umrbod mute qilingansiz" if left == "umrbod" else f"🔇 Siz mute qilingansiz. Yana {left} yoza olmaysiz"
+    return web.json_response({"error": text}, status=403)
+
+
 async def api_chat_list(request: web.Request):
     user = _auth(request)
     after = max(int(request.query.get("after", "0") or 0), 0)
@@ -157,8 +182,8 @@ async def api_chat_list(request: web.Request):
 
 async def api_chat_send(request: web.Request):
     user = _auth(request)
-    if await db.is_banned(user["id"]):
-        raise web.HTTPForbidden(reason="Siz chatga yoza olmaysiz")
+    if (resp := await _muted_resp(user)) is not None:
+        return resp
     body = await request.json()
     text = re.sub(r"[ \t]+", " ", str(body.get("text") or "")).strip()
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -172,6 +197,50 @@ async def api_chat_send(request: web.Request):
     name = (name or (f"@{user['username']}" if user.get("username") else "") or "Foydalanuvchi")[:40]
     msg = await db.chat_add(user["id"], name, text)
     return web.json_response({"ok": True, "item": {**msg, "mine": True, "staff": perms.is_staff(user["id"])}})
+
+
+MOD_MAX_MIN = 525600  # 1 yil
+
+
+async def api_chat_mod(request: web.Request):
+    """Chat moderatsiyasi (umumiy chat va teatr chati): xabarni o'chirish, mute, ban va ularni bekor qilish."""
+    body = await request.json()
+    action = str(body.get("action") or "")
+    if action == "delete":
+        _admin(request)
+        mid = int(body.get("id") or 0)
+        if body.get("scope") == "theatre":
+            await db.th_chat_delete(mid)
+        else:
+            await db.chat_delete(mid)
+        return web.json_response({"ok": True})
+    if action not in ("mute", "ban", "unmute", "unban"):
+        return _bad("Noto'g'ri amal")
+    _admin(request, "ban")
+    uid = int(body.get("uid") or 0)
+    if not uid:
+        return _bad("Foydalanuvchi topilmadi")
+    if perms.is_staff(uid):
+        return _bad("Adminga mute yoki ban qo'llab bo'lmaydi")
+    if action in ("unmute", "unban"):
+        await db.set_punish(uid, action[2:], 0)
+        return web.json_response({"ok": True})
+    if body.get("forever"):
+        until = db.FOREVER
+    else:
+        minutes = int(body.get("minutes") or 0)
+        if not 1 <= minutes <= MOD_MAX_MIN:
+            return _bad("Muddatni tanlang")
+        until = int(time.time()) + minutes * 60
+    await db.set_punish(uid, action, until)
+    return web.json_response({"ok": True, "until": until})
+
+
+async def api_admin_punish(request: web.Request):
+    """Foydalanuvchining hozirgi jazolari (moderatsiya oynasi uchun)."""
+    _admin(request, "ban")
+    uid = int(request.query.get("uid", "0") or 0)
+    return web.json_response({**await db.punish_status(uid), "staff": perms.is_staff(uid)})
 
 
 async def api_chat_delete(request: web.Request):
@@ -331,9 +400,26 @@ async def logo(request: web.Request):
 
 
 # ───────────── Admin API ─────────────
+def _day_start() -> int:
+    """Bugungi kun boshi (00:00) — bot vaqt zonasida."""
+    from datetime import datetime, timedelta, timezone
+    n = datetime.now(timezone(timedelta(hours=config.THEATRE_TZ)))
+    return int(n.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+
+async def api_admin_punished(request: web.Request):
+    """Admin panel: mute list va ban list."""
+    _admin(request, "ban")
+    out = {}
+    for kind in ("mute", "ban"):
+        out[kind] = [{"uid": r["id"], "name": r["full_name"] or "", "username": r["username"] or "",
+                      "until": r["until"]} for r in await db.punished_list(kind)]
+    return web.json_response(out)
+
+
 async def api_admin_stats(request: web.Request):
     _admin(request, "stats")
-    s = await db.stats()
+    s = await db.stats(_day_start())
     s["top"] = [{"id": t["id"], "code": db.movie_code(t), "title": t["title"], "views": t["views"]} for t in s["top"]]
     return web.json_response(s)
 
@@ -982,10 +1068,15 @@ async def api_th_chat_list(request: web.Request):
 async def api_th_chat_send(request: web.Request):
     _th_on()
     user = _auth(request)
-    if await db.is_banned(user["id"]):
-        raise web.HTTPForbidden(reason="Siz chatga yoza olmaysiz")
     body = await request.json()
-    key = await _th_chat_room(user, str(body.get("room") or "pub"), True)
+    room_param = str(body.get("room") or "pub")
+    owned = None
+    if room_param != "pub":  # o'zi ochgan xonada mute ta'sir qilmaydi
+        r = await db.th_room_get(room_param)
+        owned = r["owner"] if r else None
+    if (resp := await _muted_resp(user, owned)) is not None:
+        return resp
+    key = await _th_chat_room(user, room_param, True)
     text = re.sub(r"[ \t]+", " ", str(body.get("text") or "")).strip()
     text = re.sub(r"\n{3,}", "\n\n", text)
     if not text:
@@ -1170,7 +1261,7 @@ async def api_admin_th_cancel(request: web.Request):
 
 
 def make_app(bot) -> web.Application:
-    app = web.Application(middlewares=[errors], client_max_size=60 * 1024 * 1024)
+    app = web.Application(middlewares=[errors, ban_guard], client_max_size=60 * 1024 * 1024)
     app["bot"] = bot
     r = app.router
     r.add_get("/", index)
@@ -1204,11 +1295,14 @@ def make_app(bot) -> web.Application:
     r.add_post("/api/admin/theatre/premiere", api_admin_th_premiere)
     r.add_post("/api/admin/theatre/cancel", api_admin_th_cancel)
     r.add_post("/api/admin/theatre/rebuild", api_admin_th_rebuild)
+    r.add_post("/api/chat/mod", api_chat_mod)
+    r.add_get("/api/admin/punish", api_admin_punish)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)
     # admin
     r.add_get("/api/admin/stats", api_admin_stats)
+    r.add_get("/api/admin/punished", api_admin_punished)
     r.add_get("/api/admin/settings", api_admin_settings)
     r.add_post("/api/admin/setting", api_admin_setting)
     r.add_post("/api/admin/theme", api_admin_theme)

@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS users(
   joined_at INTEGER NOT NULL,
   last_active INTEGER NOT NULL,
   banned INTEGER NOT NULL DEFAULT 0,
+  ban_until INTEGER NOT NULL DEFAULT 0,
+  mute_until INTEGER NOT NULL DEFAULT 0,
   blocked INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS movies(
@@ -174,6 +176,10 @@ async def init(path: str) -> None:
 
 async def _migrate() -> None:
     """Eski bazalarni (zaxiradan tiklanganlarini ham) yangi tuzilishga keltiradi."""
+    ucols = {r["name"] for r in await _all("PRAGMA table_info(users)")}
+    for name in ("ban_until", "mute_until"):  # muddatli ban / mute
+        if name not in ucols:
+            await _db.execute(f"ALTER TABLE users ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0")
     cols = {r["name"] for r in await _all("PRAGMA table_info(movies)")}
     for name in ("src_chat", "src_msg"):
         if name not in cols:
@@ -300,23 +306,73 @@ async def touch_user(uid: int, full_name: str, username: str | None) -> bool:
         (uid, full_name, username, now, now),
     )
     await _db.commit()
-    row = await _one("SELECT banned FROM users WHERE id=?", (uid,))
-    return bool(row["banned"])
+    return await is_banned(uid)
+
+
+FOREVER = 4102444800  # «umrbod» (2100-yil)
+
+
+def fmt_left(until: int) -> str:
+    """Jazo tugashigacha qolgan vaqt: «2 soat 10 daqiqa» yoki «umrbod»."""
+    if until >= FOREVER - 1:
+        return "umrbod"
+    mins = max((int(until - time.time()) + 59) // 60, 1)  # daqiqaga yuqoriga yaxlitlanadi
+    d, mins = divmod(mins, 1440)
+    h, m = divmod(mins, 60)
+    parts = []
+    if d:
+        parts.append(f"{d} kun")
+    if h:
+        parts.append(f"{h} soat")
+    if m or not parts:
+        parts.append(f"{m or 1} daqiqa")
+    return " ".join(parts[:2])
+
+
+async def ban_until(uid: int):
+    """Faol ban bo'lsa — tugash vaqti (umrbod: FOREVER), bo'lmasa None."""
+    row = await _one("SELECT banned, ban_until FROM users WHERE id=?", (uid,))
+    if not row or not row["banned"]:
+        return None
+    if row["ban_until"] == 0:  # eski (muddatsiz) ban
+        return FOREVER
+    return row["ban_until"] if row["ban_until"] > time.time() else None
+
+
+async def mute_until(uid: int):
+    row = await _one("SELECT mute_until FROM users WHERE id=?", (uid,))
+    return row["mute_until"] if row and row["mute_until"] > time.time() else None
 
 
 async def set_ban(uid: int, flag: bool) -> None:
+    await set_punish(uid, "ban", FOREVER if flag else 0)
+
+
+async def set_punish(uid: int, kind: str, until: int) -> None:
+    """kind: 'ban' | 'mute'. until: tugash vaqti (unix), 0 — jazoni bekor qilish."""
     now = int(time.time())
-    await _run(
-        """INSERT INTO users(id, full_name, username, joined_at, last_active, banned)
-           VALUES(?,?,?,?,?,?)
-           ON CONFLICT(id) DO UPDATE SET banned=excluded.banned""",
-        (uid, "", None, now, now, int(flag)),
-    )
+    if kind == "ban":
+        await _run(
+            """INSERT INTO users(id, full_name, username, joined_at, last_active, banned, ban_until)
+               VALUES(?,?,?,?,?,?,?)
+               ON CONFLICT(id) DO UPDATE SET banned=excluded.banned, ban_until=excluded.ban_until""",
+            (uid, "", None, now, now, 1 if until else 0, until),
+        )
+    else:
+        await _run(
+            """INSERT INTO users(id, full_name, username, joined_at, last_active, mute_until)
+               VALUES(?,?,?,?,?,?)
+               ON CONFLICT(id) DO UPDATE SET mute_until=excluded.mute_until""",
+            (uid, "", None, now, now, until),
+        )
+
+
+async def punish_status(uid: int) -> dict:
+    return {"ban": await ban_until(uid) or 0, "mute": await mute_until(uid) or 0}
 
 
 async def is_banned(uid: int) -> bool:
-    row = await _one("SELECT banned FROM users WHERE id=?", (uid,))
-    return bool(row and row["banned"])
+    return await ban_until(uid) is not None
 
 
 async def mark_blocked(uid: int) -> None:
@@ -324,7 +380,8 @@ async def mark_blocked(uid: int) -> None:
 
 
 async def broadcast_ids() -> list[int]:
-    rows = await _all("SELECT id FROM users WHERE banned=0 AND blocked=0")
+    rows = await _all(
+        "SELECT id FROM users WHERE blocked=0 AND (banned=0 OR (ban_until>0 AND ban_until<=?))", (int(time.time()),))
     return [r["id"] for r in rows]
 
 
@@ -1101,16 +1158,29 @@ async def set_setting(key: str, value: str) -> None:
 
 
 # ───────────── Statistika ─────────────
-async def stats() -> dict:
+async def punished_list(kind: str) -> list:
+    """Hozir faol mute / ban ro'yxati (jazo tugashiga yaqinlari avval)."""
+    now = int(time.time())
+    if kind == "mute":
+        return await _all(
+            "SELECT id, full_name, username, mute_until AS until FROM users WHERE mute_until>? "
+            "ORDER BY mute_until LIMIT 200", (now,))
+    return await _all(
+        "SELECT id, full_name, username, CASE WHEN ban_until=0 THEN ? ELSE ban_until END AS until FROM users "
+        "WHERE banned=1 AND (ban_until=0 OR ban_until>?) ORDER BY until LIMIT 200", (FOREVER, now))
+
+
+async def stats(day_start: int | None = None) -> dict:
     now = int(time.time())
     day, week = now - 86400, now - 7 * 86400
+    ds = day if day_start is None else day_start  # «bugun» — kun boshidan (00:00)
     one = lambda sql, p=(): _one(sql, p)  # noqa: E731
     return {
         "users": (await one("SELECT COUNT(*) c FROM users"))["c"],
         "new_day": (await one("SELECT COUNT(*) c FROM users WHERE joined_at>=?", (day,)))["c"],
         "new_week": (await one("SELECT COUNT(*) c FROM users WHERE joined_at>=?", (week,)))["c"],
         "active_day": (await one("SELECT COUNT(*) c FROM users WHERE last_active>=?", (day,)))["c"],
-        "banned": (await one("SELECT COUNT(*) c FROM users WHERE banned=1"))["c"],
+        "banned": (await one("SELECT COUNT(*) c FROM users WHERE banned=1 AND (ban_until=0 OR ban_until>?)", (now,)))["c"],
         "blocked": (await one("SELECT COUNT(*) c FROM users WHERE blocked=1"))["c"],
         "movies": (await one("SELECT COUNT(*) c FROM movies WHERE status='live' AND series_id IS NULL"))["c"],
         "pending": (await one("SELECT COUNT(*) c FROM movies WHERE status='pending'"))["c"],
@@ -1118,6 +1188,11 @@ async def stats() -> dict:
             "SELECT COUNT(DISTINCT series_id) c FROM movies WHERE status='live' AND series_id IS NOT NULL"))["c"],
         "views": (await one("SELECT COUNT(*) c FROM views"))["c"],
         "views_day": (await one("SELECT COUNT(*) c FROM views WHERE at>=?", (day,)))["c"],
+        "users_today": (await one("SELECT COUNT(*) c FROM users WHERE joined_at>=?", (ds,)))["c"],
+        "views_today": (await one("SELECT COUNT(*) c FROM views WHERE at>=?", (ds,)))["c"],
+        "movies_today": (await one("SELECT COUNT(*) c FROM movies WHERE created_at>=?", (ds,)))["c"],
+        "movies_all": (await one("SELECT COUNT(*) c FROM movies"))["c"],
+        "muted": (await one("SELECT COUNT(*) c FROM users WHERE mute_until>?", (now,)))["c"],
         "channels": (await one("SELECT COUNT(*) c FROM channels"))["c"],
         "top": [dict(r) for r in await top_movies(5)],
     }

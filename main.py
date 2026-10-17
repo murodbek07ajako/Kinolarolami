@@ -28,7 +28,10 @@ class TrackMiddleware(BaseMiddleware):
         if u and not u.is_bot:
             banned = await db.touch_user(u.id, u.full_name, u.username)
             if banned and not perms.is_staff(u.id):
+                left = await db.ban_until(u.id)
                 text = "🚫 Siz botdan foydalanishdan bloklangansiz."
+                if left and left < db.FOREVER - 1:
+                    text += f"\n⏳ Blok tugashiga: {db.fmt_left(left)}"
                 if isinstance(event, Message):
                     await event.answer(text)
                 elif isinstance(event, CallbackQuery):
