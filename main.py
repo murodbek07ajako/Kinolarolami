@@ -40,10 +40,6 @@ class TrackMiddleware(BaseMiddleware):
 async def setup_bot(bot: Bot) -> None:
     await bot.set_my_commands([
         BotCommand(command="start", description="🏠 Bosh menyu"),
-        BotCommand(command="top", description="🔥 Top kinolar"),
-        BotCommand(command="new", description="🆕 Yangi kinolar"),
-        BotCommand(command="random", description="🎲 Tasodifiy kino"),
-        BotCommand(command="favs", description="⭐ Saralanganlar"),
         BotCommand(command="help", description="ℹ️ Yordam"),
     ])
     for admin_id in perms.staff_ids():

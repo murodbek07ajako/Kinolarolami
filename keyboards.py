@@ -27,22 +27,12 @@ def main_kb() -> InlineKeyboardMarkup:
     w = webapp_button("🎬 MEGA CINEMA")
     if w:
         return _kb([[w]])
-    return _kb([[B(text="🔥 Top kinolar", callback_data="top")]])  # katalog manzili sozlanmagan bo'lsa
+    return _kb([])  # katalog manzili (WEBAPP_URL) sozlanmagan bo'lsa
 
 
 def sub_kb(channels, movie_id: int = 0) -> InlineKeyboardMarkup:
     rows = [[B(text=f"📢 {ch['title'] or 'Kanal'}", url=ch["link"])] for ch in channels]
     rows.append([B(text="✅ Obunani tekshirish", callback_data=f"chk:{movie_id}")])
-    return _kb(rows)
-
-
-def movies_kb(movies, menu: bool = True) -> InlineKeyboardMarkup:
-    rows = []
-    for m in movies:
-        label = f"🎬 {m['title']}" + (f" • {m['year']}" if m["year"] else "")
-        rows.append([B(text=label[:60], callback_data=f"m:{m['id']}")])
-    if menu:
-        rows.append([B(text="⬅️ Menyu", callback_data="menu")])
     return _kb(rows)
 
 
@@ -137,11 +127,8 @@ def announce_kb(movie_id: int) -> InlineKeyboardMarkup:
 
 def announce_many_kb() -> InlineKeyboardMarkup:
     """Bir nechta yangi kino e'loni tugmalari."""
-    rows = [[B(text="🆕 Yangi kinolar", callback_data="new")]]
     w = webapp_button("🎞 Katalogni ochish")
-    if w:
-        rows.insert(0, [w])
-    return _kb(rows)
+    return _kb([[w]] if w else [])
 
 
 def pending_kb() -> InlineKeyboardMarkup:

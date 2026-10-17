@@ -4,7 +4,7 @@
 - Chiroyli uzun salomlashuv + «🎬 Katalog» (Mini App) tugmasi
 - Kino kodi yoki nomi bilan qidirish
 - Mini App katalog: poster, janr filtri, Yangi / Top / Yil / Saralangan, qidiruv, cheksiz skroll
-- Saralanganlar, Top, Yangi, Tasodifiy kino, do'stlarga ulashish (`t.me/bot?start=m_5`)
+- Top, yangilari, saralanganlar va boshqa bo'limlar — faqat katalogda (Mini App). Botda: kod yuborish, nom bo'yicha qidiruv, do'stlarga ulashish (`t.me/bot?start=m_5`)
 - Majburiy obuna (bir nechta kanal) + «Tekshirish» tugmasi
 - Admin panel `/admin`: kino qo'shish/o'chirish, statistika, ommaviy xabar, kanallar, ban/unban, sozlamalar
 - Kontentni himoyalash (forward va saqlashni taqiqlash) — admin sozlamalarida

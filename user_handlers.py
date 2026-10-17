@@ -1,12 +1,13 @@
 """Oddiy foydalanuvchilar uchun handlerlar."""
 import html
+from pathlib import Path
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 
 import config
 import db
@@ -22,7 +23,7 @@ WELCOME = (
     "tomosha qilish endi juda oson va mutlaqo bepul.\n\n"
     "━━━━━━━━━━━━━━━\n"
     "🔢 <b>Kod bilan</b> — kino kodini yuboring, kino darhol keladi.\n"
-    "🔎 <b>Nom bilan</b> — kino nomini yozing, bot uni qidirib topadi.\n"
+    "🔎 <b>Nom bilan</b> — kino nomini yozing, bot uni katalogdan qidirib beradi.\n"
     "🎞 <b>Katalog</b> — pastdagi tugma orqali oching: posterlar, janrlar va qulay qidiruv bir joyda.\n"
     "━━━━━━━━━━━━━━━\n\n"
     "💡 <i>Maslahat: kino kodini do'stlaringizga yuboring — ular ham uni bir zumda topadi!</i>\n\n"
@@ -31,16 +32,32 @@ WELCOME = (
 
 HELP = (
     "ℹ️ <b>Yordam</b>\n\n"
-    "• Kino kodini yuboring — kino keladi\n"
-    "• Kino nomini yozing — qidiruv natijalari chiqadi\n\n"
+    "• Kino kodini yuboring — kino darhol keladi\n"
+    "• Kino nomini yozing — katalogda qidirib beramiz\n"
+    "• <b>🎬 MEGA CINEMA</b> tugmasi — hamma bo'limlar shu yerda: top, yangilari, serial, multfilm, "
+    "anime va saralanganlar\n\n"
     "<b>Buyruqlar:</b>\n"
     "/start — bosh menyu\n"
-    "/top — eng ko'p ko'rilganlar\n"
-    "/new — yangi kinolar\n"
-    "/random — tasodifiy kino\n"
-    "/favs — saralanganlar\n"
     "/help — yordam"
 )
+
+
+WELCOME_IMG = Path(__file__).parent / "welcome.jpg"
+_welcome_fid: str | None = None  # birinchi yuborilgach Telegram file_id si saqlanadi (qayta yuklanmaydi)
+
+
+async def send_welcome(bot: Bot, chat_id: int, user) -> None:
+    """Salomlashuv: tepada MEGA CINEMA rasmi, ostida matn va katalog tugmasi."""
+    global _welcome_fid
+    text, markup = welcome_text(user), kb.main_kb()
+    try:
+        msg = await bot.send_photo(chat_id, _welcome_fid or FSInputFile(WELCOME_IMG), caption=text,
+                                   reply_markup=markup)
+        if msg.photo:
+            _welcome_fid = msg.photo[-1].file_id
+    except (TelegramBadRequest, FileNotFoundError, OSError):
+        _welcome_fid = None
+        await bot.send_message(chat_id, text, reply_markup=markup, disable_web_page_preview=True)
 
 
 def welcome_text(user) -> str:
@@ -93,7 +110,7 @@ async def cmd_start(m: Message, command: CommandObject, bot: Bot, state: FSMCont
         res = await svc.deliver(bot, m.chat.id, m.from_user.id, mid)
         if res == "ok":
             return
-    await m.answer(welcome_text(m.from_user), reply_markup=kb.main_kb(), disable_web_page_preview=True)
+    await send_welcome(bot, m.chat.id, m.from_user)
 
 
 @router.message(Command("help"))
@@ -101,102 +118,26 @@ async def cmd_help(m: Message):
     await m.answer(HELP, reply_markup=kb.open_catalog_kb())
 
 
-@router.message(Command("top"))
-async def cmd_top(m: Message, bot: Bot):
-    await show_top(bot, m)
+@router.message(Command("help"))
+async def cmd_help(m: Message):
+    await m.answer(HELP, reply_markup=kb.open_catalog_kb())
 
 
-@router.message(Command("new"))
-async def cmd_new(m: Message, bot: Bot):
-    await show_new(bot, m)
+# Eski xabarlardagi tugmalar / eski buyruqlar: bo'limlar endi faqat katalogda
+LEGACY_TEXT = "🎞 Top, yangilari, saralanganlar va boshqa barcha bo'limlar endi <b>katalogda</b>. 👇"
 
 
-@router.message(Command("random"))
-async def cmd_random(m: Message, bot: Bot):
-    await show_random(bot, m)
+@router.message(Command("top", "new", "random", "favs"))
+async def cmd_legacy(m: Message):
+    await m.answer(LEGACY_TEXT, reply_markup=kb.open_catalog_kb())
 
 
-@router.message(Command("favs"))
-async def cmd_favs(m: Message, bot: Bot):
-    await show_favs(bot, m)
-
-
-# ───────────── Ro'yxatlar ─────────────
-async def show_top(bot: Bot, ev):
-    if not await gate(bot, ev):
-        return
-    rows = await db.top_movies(10)
-    if not rows:
-        return await _empty(ev)
-    await render(ev, "🔥 <b>Eng ko'p ko'rilgan kinolar</b>\n\nKerakli kinoni tanlang 👇", kb.movies_kb(rows))
-
-
-async def show_new(bot: Bot, ev):
-    if not await gate(bot, ev):
-        return
-    rows = await db.new_movies(10)
-    if not rows:
-        return await _empty(ev)
-    await render(ev, "🆕 <b>Yangi qo'shilgan kinolar</b>\n\nKerakli kinoni tanlang 👇", kb.movies_kb(rows))
-
-
-async def show_favs(bot: Bot, ev):
-    if not await gate(bot, ev):
-        return
-    rows = await db.fav_movies(ev.from_user.id)
-    if not rows:
-        text = "⭐ Saralanganlar ro'yxati hozircha bo'sh.\n\nKino ostidagi «⭐ Saralanganlarga qo'shish» tugmasini bosing."
-        return await render(ev, text, kb.movies_kb([]))
-    await render(ev, "⭐ <b>Saralangan kinolaringiz</b>\n\nKerakli kinoni tanlang 👇", kb.movies_kb(rows))
-
-
-async def show_random(bot: Bot, ev):
-    if not await gate(bot, ev):
-        return
-    movie = await db.random_movie()
-    if not movie:
-        return await _empty(ev)
-    await reply_deliver(bot, ev, movie["id"])
-
-
-async def _empty(ev):
-    if isinstance(ev, CallbackQuery):
-        await ev.answer("Hozircha kinolar yo'q 😔", show_alert=True)
-    else:
-        await ev.answer("Hozircha kinolar yo'q 😔")
-
-
-@router.callback_query(F.data == "top")
-async def cb_top(c: CallbackQuery, bot: Bot):
+@router.callback_query(F.data.in_({"top", "new", "rand", "favs", "menu"}))
+async def cb_legacy(c: CallbackQuery, bot: Bot):
     await c.answer()
-    await show_top(bot, c)
+    await bot.send_message(c.message.chat.id, LEGACY_TEXT, reply_markup=kb.open_catalog_kb())
 
 
-@router.callback_query(F.data == "new")
-async def cb_new(c: CallbackQuery, bot: Bot):
-    await c.answer()
-    await show_new(bot, c)
-
-
-@router.callback_query(F.data == "favs")
-async def cb_favs(c: CallbackQuery, bot: Bot):
-    await c.answer()
-    await show_favs(bot, c)
-
-
-@router.callback_query(F.data == "rand")
-async def cb_rand(c: CallbackQuery, bot: Bot):
-    await c.answer()
-    await show_random(bot, c)
-
-
-@router.callback_query(F.data == "menu")
-async def cb_menu(c: CallbackQuery):
-    await c.answer()
-    await render(c, welcome_text(c.from_user), kb.main_kb())
-
-
-# ───────────── Obuna tekshiruvi ─────────────
 @router.callback_query(F.data.startswith("chk:"))
 async def cb_check(c: CallbackQuery, bot: Bot):
     mid = int(c.data.split(":")[1] or 0)
@@ -218,8 +159,7 @@ async def cb_check(c: CallbackQuery, bot: Bot):
         res = await svc.deliver(bot, chat_id, c.from_user.id, mid)
         if res == "ok":
             return
-    await bot.send_message(chat_id, welcome_text(c.from_user), reply_markup=kb.main_kb(),
-                           disable_web_page_preview=True)
+    await send_welcome(bot, chat_id, c.from_user)
 
 
 # ───────────── Kino ochish / saralash ─────────────
@@ -303,30 +243,17 @@ async def on_text(m: Message, bot: Bot):
     if len(q) < 2:
         await m.answer("🔎 Qidirish uchun kamida 2 ta belgi yozing.")
         return
-    rows, total = await db.search_movies(q, limit=10)
-    series = await db.search_series(q, limit=5)
-    if series:
-        lines = "\n".join(
-            f"{svc.KIND_EMOJI.get(x['kind'], '📺')} <b>{html.escape(x['title'])}</b> — kod: <code>"
-            f"{db.series_code(x['kind'], x['id'])}</code>" for x in series)
-        if not rows:
-            await m.answer(
-                f"🔎 <b>«{html.escape(q[:60])}»</b> bo'yicha qismli kontent topildi:\n\n{lines}\n\n"
-                "Qismlarini katalogdan ko'ring (qidiruvga kodni yozing) 👇",
-                reply_markup=kb.catalog_query_kb(db.series_code(series[0]["kind"], series[0]["id"])),
-            )
-            return
-        await m.answer(f"📺 Qismli kontent:\n\n{lines}\n\nQismlarini katalogdan ko'ring.",
-                       reply_markup=kb.catalog_query_kb(db.series_code(series[0]["kind"], series[0]["id"])))
-    if not rows:
+    rows, _ = await db.search_movies(q, limit=1)
+    series = await db.search_series(q, limit=1)
+    if not rows and not series:
         await m.answer(
             f"😔 <b>«{html.escape(q[:60])}»</b> bo'yicha hech narsa topilmadi.\n\n"
             "Boshqacha yozib ko'ring yoki katalogdan qidiring.",
             reply_markup=kb.open_catalog_kb(),
         )
         return
-    more = f"\n\n<i>Yana {total - len(rows)} ta natija bor — katalogdan ko'ring.</i>" if total > len(rows) else ""
     await m.answer(
-        f"🔎 <b>«{html.escape(q[:60])}»</b> bo'yicha topildi: <b>{total}</b> ta{more}\n\nKinoni tanlang 👇",
-        reply_markup=kb.movies_kb(rows, menu=False),
+        f"🔎 <b>«{html.escape(q[:60])}»</b> bo'yicha natijalar topildi.\n\n"
+        "Ko'rish uchun katalogni oching 👇",
+        reply_markup=kb.catalog_query_kb(q[:60]),
     )
