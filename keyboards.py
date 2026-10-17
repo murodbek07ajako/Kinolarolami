@@ -23,15 +23,11 @@ def webapp_button(text: str = "🎬 MEGA CINEMA", query: str = "") -> B | None:
 
 # ───────────── Foydalanuvchi ─────────────
 def main_kb() -> InlineKeyboardMarkup:
-    rows: list[list[B]] = []
-    w = webapp_button()
+    """Bosh menyu: faqat katalogni ochuvchi «MEGA CINEMA» tugmasi."""
+    w = webapp_button("🎬 MEGA CINEMA")
     if w:
-        rows.append([w])
-    rows += [
-        [B(text="🔥 Top kinolar", callback_data="top"), B(text="🆕 Yangilari", callback_data="new")],
-        [B(text="🎲 Tasodifiy kino", callback_data="rand"), B(text="⭐ Saralanganlar", callback_data="favs")],
-    ]
-    return _kb(rows)
+        return _kb([[w]])
+    return _kb([[B(text="🔥 Top kinolar", callback_data="top")]])  # katalog manzili sozlanmagan bo'lsa
 
 
 def sub_kb(channels, movie_id: int = 0) -> InlineKeyboardMarkup:

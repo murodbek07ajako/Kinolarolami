@@ -17,20 +17,16 @@ router = Router()
 
 WELCOME = (
     "🎬 <b>Assalomu alaykum, {name}!</b>\n\n"
-    "🍿 <b>{title}</b> botiga xush kelibsiz!\n\n"
-    "Bu yerda sevimli kinolaringizni <b>tez, qulay va mutlaqo bepul</b> topib, "
-    "to'g'ridan-to'g'ri Telegramning o'zida tomosha qilishingiz mumkin.\n\n"
+    "✨ <b>{title}</b> kino olamiga xush kelibsiz!\n\n"
+    "Sevimli kinolaringizni topish va ularni to'g'ridan-to'g'ri Telegramning o'zida "
+    "tomosha qilish endi juda oson va mutlaqo bepul.\n\n"
     "━━━━━━━━━━━━━━━\n"
-    "📌 <b>Qanday foydalaniladi?</b>\n\n"
     "🔢 <b>Kod bilan</b> — kino kodini yuboring, kino darhol keladi.\n"
-    "🔎 <b>Nomi bilan</b> — kino nomini (yoki janrini) yozing, bot qidirib beradi.\n"
-    "🎞 <b>Katalog</b> — pastdagi tugma orqali chiroyli mini-ilovani oching: "
-    "poster, janr, saralash va qidiruv — hammasi bir joyda.\n"
-    "⭐ <b>Saralanganlar</b> — yoqqan kinolarni saqlab qo'ying, keyin oson topasiz.\n"
-    "🔥 <b>Top</b> va 🆕 <b>Yangi</b> — eng ommabop va so'nggi qo'shilgan kinolar.\n"
+    "🔎 <b>Nom bilan</b> — kino nomini yozing, bot uni qidirib topadi.\n"
+    "🎞 <b>Katalog</b> — pastdagi tugma orqali oching: posterlar, janrlar va qulay qidiruv bir joyda.\n"
     "━━━━━━━━━━━━━━━\n\n"
-    "💡 <i>Maslahat: kino kodini do'stlaringiz bilan ulashing — ular ham bir zumda topishadi!</i>\n\n"
-    "👇 Boshlash uchun quyidagi tugmalardan birini tanlang."
+    "💡 <i>Maslahat: kino kodini do'stlaringizga yuboring — ular ham uni bir zumda topadi!</i>\n\n"
+    "👇 Boshlash uchun pastdagi tugmani bosing."
 )
 
 HELP = (
