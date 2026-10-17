@@ -42,6 +42,7 @@ _client = None
 _plan_lock = asyncio.Lock()
 _dl: dict[int, asyncio.Task] = {}
 _failed: dict[int, float] = {}
+_prog: dict[int, int] = {}   # yuklanayotgan kino: foiz
 _presence: dict[str, dict[int, float]] = {}
 _pw_tries: dict[tuple, list] = {}
 _meta_lock = asyncio.Lock()
@@ -371,7 +372,8 @@ async def state() -> dict:
 
     if secs < OPEN_H * 3600:
         return {"now": ts, "phase": "closed", "opens": slot_start(day, 0), "opens_time": hhmm(slot_start(day, 0)),
-                "next": view(0), "key": "pub:closed"}
+                "next": view(0), "key": "pub:closed",
+                "prep": prep_pct(by[0]["movie_id"]) if 0 in by else None}
     idx = min((secs - OPEN_H * 3600) // SLOT_SEC, SLOTS - 1)
     cur = view(idx)
     start = slot_start(day, idx)
@@ -383,7 +385,8 @@ async def state() -> dict:
     nxt = view(idx + 1) if idx + 1 < SLOTS else None
     return {"now": ts, "phase": phase, "key": f"pub:{day}:{idx}", "slot": cur, "start": start,
             "end": start + SLOT_SEC, "elapsed": elapsed, "movie": movie, "next": nxt,
-            "last": idx == SLOTS - 1, "day": day}
+            "last": idx == SLOTS - 1, "day": day,
+            "prep": prep_pct(by[idx + 1]["movie_id"]) if idx + 1 in by else None}
 
 
 async def current_key() -> str:
@@ -422,9 +425,13 @@ async def _download(mid: int) -> None:
     part, final = CACHE_DIR / f"{mid}.part", CACHE_DIR / f"{mid}.mp4"
     gen = _client.stream_media(row["file_id"])
     try:
+        written = 0
+        _prog[mid] = 0
         with open(part, "wb") as f:
             async for chunk in gen:
                 f.write(chunk)
+                written += len(chunk)
+                _prog[mid] = min(99, written * 100 // size)
         if part.stat().st_size != size:
             raise RuntimeError(f"hajm mos emas: {part.stat().st_size} != {size}")
         os.replace(part, final)
@@ -442,6 +449,14 @@ async def _download(mid: int) -> None:
         except Exception:
             pass
         _dl.pop(mid, None)
+        _prog.pop(mid, None)
+
+
+def prep_pct(mid: int):
+    """Kino serverda qanchalik tayyor: 100 — diskda, 0..99 — yuklanmoqda, None — yuklash boshlanmagan."""
+    if cached_path(mid):
+        return 100
+    return _prog.get(mid)
 
 
 def _prefetch(mid: int) -> None:

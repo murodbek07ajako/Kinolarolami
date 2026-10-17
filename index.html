@@ -2015,24 +2015,38 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     const seekTo = t => { try { const d = video.duration; video.currentTime = Math.max(0, isFinite(d) ? Math.min(t, d - 0.5) : t); } catch (e) {} };
     const play = () => { const p = video.play(); if (p && p.catch) p.catch(() => { if (!cfg.host) { H.started = false; setOv('start'); } }); };
 
+    const bufPct = () => {
+      if (!video.src) return 0;
+      const d = video.duration; if (!isFinite(d) || !d) return 0;
+      const t = video.currentTime; let end = t; const b = video.buffered;
+      for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && b.end(i) >= t) end = b.end(i);
+      return Math.max(0, Math.min(100, Math.round((end - t) / Math.min(20, Math.max(d - t, 1)) * 100)));
+    };
+    const updProg = () => {
+      if (!H.pp) return; const p = bufPct();
+      H.pp.textContent = p >= 100 ? '✅ Video tayyor' : '⏳ Video tayyorlanmoqda: ' + p + '%';
+    };
     function setOv(kind, d) {
-      H.cd = null;
+      H.cd = null; H.pp = null; H.ovKind = kind;
       if (!kind) { ov.hidden = true; return; }
       ov.hidden = false; ov.replaceChildren();
       const add = (tag, cls, txt) => { const e = el(tag, cls, txt); ov.appendChild(e); return e; };
       if (kind === 'start') {
         add('div', 'big', '🎬'); add('b', '', thName(H.info) || 'Kino tayyor');
         const mm = add('small', '', pub ? 'Hozirgi daqiqadan qo\'shilasiz' : 'Xona egasi qachon qo\'ysa, birga ko\'rasiz');
+        H.pp = add('small', '', ''); updProg();
         const b = el('button', 'vplay', '▶ Tomosha boshlash'); b.onclick = () => { haptic('medium'); start(); }; ov.appendChild(b);
       } else if (kind === 'closed' || kind === 'break') {
         add('div', 'big', kind === 'closed' ? '🌙' : '☕');
         add('b', '', kind === 'closed' ? 'Teatr hozir yopiq' : 'Tanaffus');
         if (d.title) add('small', '', 'Keyingi: ' + d.time + ' · ' + d.title);
+        if (d.prep != null) add('small', '', d.prep >= 100 ? '✅ Keyingi kino tayyor' : '⏳ Keyingi kino tayyorlanmoqda: ' + d.prep + '%');
         const c = add('small', '', ''); H.cd = { to: d.to, node: c };
       } else if (kind === 'empty') {
         add('div', 'big', '📭'); add('b', '', 'Hozircha reja bo\'sh'); add('small', '', 'Kinolar tayyor bo\'lgach teatr o\'zi ishga tushadi');
       } else if (kind === 'wait') {
         add('div', 'big', '⏳'); add('b', '', d || 'Yuklanmoqda...');
+        if (H.mid) { H.pp = add('small', '', ''); updProg(); }
       } else if (kind === 'err') {
         add('div', 'big', '⚠️'); add('b', '', d || 'Video ochilmadi'); add('small', '', 'Biroz kutib, qayta urinib ko\'ring');
       }
@@ -2068,15 +2082,15 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
         H.offset = st.now - Date.now() / 1000; viewers.textContent = '👁 ' + st.viewers;
         if (st.phase === 'live') {
           H.startTs = st.start; H.info = st.movie; head(st.movie, st.slot.tag);
-          sm.textContent = st.next && st.next.movie ? 'Keyingi: ' + st.next.time + ' · ' + thName(st.next.movie) : (st.last ? 'Bugungi oxirgi kino' : '');
-          if (H.mid !== st.movie.id || H.slotKey !== st.key) { stopVideo(); H.mid = st.movie.id; H.slotKey = st.key; loadVideo(st.movie.id); if (!H.started) setOv('start'); }
-          if (!H.started) { if (ov.hidden) setOv('start'); } else { if (!ov.hidden && !H.cd) setOv(null); sync(); }
+          sm.textContent = st.next && st.next.movie ? 'Keyingi: ' + st.next.time + ' · ' + thName(st.next.movie) + (st.prep != null ? (st.prep >= 100 ? ' · ✅ tayyor' : ' · ⏳ ' + st.prep + '%') : '') : (st.last ? 'Bugungi oxirgi kino' : '');
+          if (H.mid !== st.movie.id || H.slotKey !== st.key) { stopVideo(); H.mid = st.movie.id; H.slotKey = st.key; loadVideo(st.movie.id); setOv(H.started ? 'wait' : 'start', H.started ? 'Keyingi kino yuklanmoqda...' : undefined); }
+          if (!H.started) { if (ov.hidden) setOv('start'); } else { if (!ov.hidden && !H.cd && H.ovKind !== 'wait') setOv(null); sync(); }
         } else {
           stopVideo(); H.info = null; nm.textContent = '';
           const n = st.next && st.next.movie ? st.next : null;
-          if (st.phase === 'closed') { sm.textContent = '🌙 Teatr ' + st.opens_time + ' da ochiladi'; setOv('closed', { to: st.opens, title: n ? thName(n.movie) : '', time: n ? n.time : '' }); }
+          if (st.phase === 'closed') { sm.textContent = '🌙 Teatr ' + st.opens_time + ' da ochiladi'; setOv('closed', { to: st.opens, title: n ? thName(n.movie) : '', time: n ? n.time : '', prep: st.prep }); }
           else if (!st.slot.movie && !n) { sm.textContent = ''; setOv('empty'); }
-          else { sm.textContent = ''; setOv('break', { to: st.next ? st.next.start : st.end, title: n ? thName(n.movie) : '', time: n ? n.time : '' }); }
+          else { sm.textContent = ''; setOv('break', { to: st.next ? st.next.start : st.end, title: n ? thName(n.movie) : '', time: n ? n.time : '', prep: st.prep }); }
         }
       } catch (e) { if (!H.mid) setOv('wait', errMsg(e)); }
     }
@@ -2086,7 +2100,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
         const d = await api('/api/theatre/room/' + cfg.room), r = d.room;
         H.offset = r.now - Date.now() / 1000; viewers.textContent = '👁 ' + d.viewers;
         H.base = { pos: r.pos, now: r.now, playing: r.playing };
-        if (!H.mid) { H.mid = r.movie.id; H.info = r.movie; head(r.movie, ''); sm.textContent = '🏠 ' + r.title + ' · ' + r.owner; loadVideo(r.movie.id); if (!cfg.host) setOv('start'); }
+        if (!H.mid) { H.mid = r.movie.id; H.info = r.movie; head(r.movie, ''); sm.textContent = '🏠 ' + r.title + ' · ' + r.owner; loadVideo(r.movie.id); setOv(cfg.host ? 'wait' : 'start', 'Video tayyorlanmoqda...'); }
         if (cfg.host) return;
         if (!H.started) { if (ov.hidden) setOv('start'); return; }
         sync();
@@ -2100,12 +2114,17 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       H.timers.push(setInterval(() => { if (!video.paused) push(); }, 5000));
     }
     video.addEventListener('ended', () => { if (pub) setOv('wait', 'Kino tugadi...'); });
+    ['progress', 'loadedmetadata', 'timeupdate', 'canplay'].forEach(ev => video.addEventListener(ev, updProg));
+    video.addEventListener('canplay', () => { if (H.ovKind === 'wait' && H.mid) setOv(null); });
+    video.addEventListener('playing', () => { if (H.ovKind === 'wait' && H.mid) setOv(null); });
+    video.addEventListener('waiting', () => { if (H.started && H.mid && !video.ended && ov.hidden) setOv('wait', 'Yuklanmoqda...'); });
 
     const poll = pub ? pollPub : pollRoom;
     setOv('wait', 'Zal tayyorlanmoqda...');
     poll(); chat.poll(true);
     H.timers.push(setInterval(poll, pub ? 5000 : 3000));
     H.timers.push(setInterval(() => chat.poll(false), 3000));
+    H.timers.push(setInterval(updProg, 500));
     H.timers.push(setInterval(() => {
       if (H.cd) { const left = H.cd.to - srv(); H.cd.node.textContent = left > 0 ? '⏱ ' + thCount(left) : 'Boshlanmoqda...'; }
     }, 1000));
