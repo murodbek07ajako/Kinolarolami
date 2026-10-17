@@ -17,6 +17,7 @@ import db
 import broadcast
 import perms
 import services as svc
+import theatre
 
 SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
 THEMES = ("default", "newyear", "ramadan", "navruz")  # dizayn rejimlari
@@ -189,6 +190,7 @@ async def api_me(request: web.Request):
         "theme": await _theme(),
         "favs": await db.fav_ids(user["id"]),
         "uid": user["id"],
+        "theatre": theatre.available(),
         "admin": perms.is_staff(user["id"]),
         "contact": _contact_link(),
         **perms.info(user["id"]),
@@ -613,6 +615,19 @@ async def _clean_draft(body: dict, user: dict) -> dict:
     if not parts:
         out = _clean_meta(body)
         out["kind"] = kind
+        pi = body.get("premiere_idx")
+        if pi not in (None, ""):
+            try:
+                pi = int(pi)
+            except (TypeError, ValueError):
+                raise ValueError("Premyera vaqti noto'g'ri")
+            if not 0 <= pi < theatre.SLOTS:
+                raise ValueError("Premyera vaqti noto'g'ri")
+            if not theatre.available():
+                raise ValueError("Premyera uchun teatr ulanmagan (API_ID / API_HASH)")
+            if await db.q_one("SELECT 1 FROM movies WHERE status='premiere' AND premiere_at=?", (theatre.premiere_ts(pi),)):
+                raise ValueError("Bu vaqtga boshqa premyera qo'yilgan")
+            out["premiere_idx"] = pi
         return out
     try:
         ep = int(body.get("ep") or 0)
@@ -651,6 +666,8 @@ async def api_admin_draft_save(request: web.Request):
     title = html.escape(draft["title"]) + (f" ({draft['year']})" if draft.get("year") else "")
     if draft.get("series_id"):
         title += f" — {draft['ep']}-qism"
+    if draft.get("premiere_idx") is not None:
+        title += f"\n⭐ Premyera: ertaga {theatre.premiere_slots()[draft['premiere_idx']]['time']} da teatrda"
     text = (
         "✅ <b>Kino ma'lumotlari saqlandi!</b>\n\n"
         f"🎬 <b>{title}</b>\n\n"
@@ -866,6 +883,277 @@ async def api_admin_broadcast(request: web.Request):
     return web.json_response({"ok": True, "total": total})
 
 
+# ───────────── Teatr ─────────────
+TH_CHAT_MAX = 300
+
+
+def _th_on() -> None:
+    if not theatre.available():
+        raise web.HTTPServiceUnavailable(reason="Teatr hali ulanmagan")
+
+
+def _auth_q(request: web.Request) -> dict:
+    """<video src> sarlavha yubora olmaydi, shuning uchun initData ?a= orqali keladi."""
+    user = verify_init_data(request.query.get("a", ""), config.BOT_TOKEN)
+    if not user:
+        raise web.HTTPUnauthorized(reason="auth")
+    return user
+
+
+def _uname(user: dict) -> str:
+    name = " ".join(x for x in (user.get("first_name"), user.get("last_name")) if x).strip()
+    return (name or (f"@{user['username']}" if user.get("username") else "") or "Foydalanuvchi")[:40]
+
+
+async def api_th_state(request: web.Request):
+    _th_on()
+    user = _auth(request)
+    st = await theatre.state()
+    if request.query.get("w"):
+        theatre.seen("pub", user["id"])
+    st["viewers"] = theatre.viewers("pub")
+    return web.json_response(st)
+
+
+async def api_th_plan(request: web.Request):
+    _th_on()
+    _auth(request)
+    return web.json_response(await theatre.plan_view())
+
+
+async def api_th_video(request: web.Request):
+    _th_on()
+    user = _auth_q(request)
+    if await db.is_banned(user["id"]) and not perms.is_staff(user["id"]):
+        raise web.HTTPForbidden(reason="ban")
+    mid = int(request.match_info["id"])
+    row = await db.get_movie(mid)
+    if not row:
+        raise web.HTTPNotFound(reason="not found")
+    rid = request.query.get("r", "")
+    if rid:
+        room = await db.th_room_get(rid)
+        if not room or room["movie_id"] != mid:
+            raise web.HTTPNotFound(reason="not found")
+        if not await db.th_member_has(rid, user["id"]):
+            raise web.HTTPForbidden(reason="locked")
+    elif not (await theatre.in_today_plan(mid) or perms.is_staff(user["id"])):
+        raise web.HTTPForbidden(reason="forbidden")
+    return await theatre.serve(request, row)
+
+
+async def _th_chat_room(user: dict, room: str, for_post: bool) -> str | None:
+    if room == "pub":
+        key = await theatre.current_key()
+        if key == "pub:closed":
+            if for_post:
+                raise web.HTTPBadRequest(reason="Teatr hozir yopiq")
+            return None
+        return key
+    r = await db.th_room_get(room)
+    if not r:
+        raise web.HTTPNotFound(reason="Xona topilmadi")
+    if not (await db.th_member_has(r["id"], user["id"]) or perms.is_staff(user["id"])):
+        raise web.HTTPForbidden(reason="locked")
+    return r["id"]
+
+
+def _th_chat_item(r, viewer_id: int) -> dict:
+    return {"id": r["id"], "uid": r["user_id"], "name": r["name"] or "Foydalanuvchi", "text": r["text"],
+            "at": r["at"], "mine": r["user_id"] == viewer_id, "staff": perms.is_staff(r["user_id"])}
+
+
+async def api_th_chat_list(request: web.Request):
+    user = _auth(request)
+    key = await _th_chat_room(user, request.query.get("room", "pub"), False)
+    if key is None:
+        return web.json_response({"key": "pub:closed", "items": []})
+    after = max(int(request.query.get("after", "0") or 0), 0)
+    rows = await db.th_chat_list(key, after, 50)
+    return web.json_response({"key": key, "items": [_th_chat_item(r, user["id"]) for r in rows]})
+
+
+async def api_th_chat_send(request: web.Request):
+    user = _auth(request)
+    if await db.is_banned(user["id"]):
+        raise web.HTTPForbidden(reason="Siz chatga yoza olmaysiz")
+    body = await request.json()
+    key = await _th_chat_room(user, str(body.get("room") or "pub"), True)
+    text = re.sub(r"[ \t]+", " ", str(body.get("text") or "")).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    if not text:
+        return _bad("Xabar yozing")
+    if len(text) > TH_CHAT_MAX:
+        return _bad(f"Xabar {TH_CHAT_MAX} belgidan oshmasligi kerak")
+    if time.time() - await db.th_chat_last_at(user["id"]) < CHAT_COOLDOWN:
+        return web.json_response({"error": "Biroz sekinroq yozing 🙂"}, status=429)
+    msg = await db.th_chat_add(key, user["id"], _uname(user), text)
+    return web.json_response({"ok": True, "key": key, "item": {**msg, "mine": True, "staff": perms.is_staff(user["id"])}})
+
+
+async def api_th_chat_delete(request: web.Request):
+    _admin(request)
+    body = await request.json()
+    await db.th_chat_delete(int(body.get("id", 0)))
+    return web.json_response({"ok": True})
+
+
+# — Shaxsiy xonalar —
+async def api_th_rooms(request: web.Request):
+    _th_on()
+    user = _auth(request)
+    rows = await db.th_rooms_list(int(time.time()) - 3 * 3600)
+    return web.json_response({"items": [
+        {"id": r["id"], "title": r["title"], "locked": bool(r["pw"]), "owner": r["owner_name"],
+         "movie": r["mtitle"], "viewers": theatre.viewers(r["id"]), "mine": r["owner"] == user["id"]}
+        for r in rows]})
+
+
+async def api_th_room_create(request: web.Request):
+    _th_on()
+    user = _auth(request)
+    body = await request.json()
+    title = re.sub(r"\s+", " ", str(body.get("title") or "")).strip()[:40]
+    if len(title) < 2:
+        return _bad("Xonaga nom bering (kamida 2 belgi)")
+    mv = await db.get_movie(int(body.get("movie_id") or 0))
+    if not mv or (mv["status"] != "live" and not perms.is_staff(user["id"])):
+        return _bad("Kinoni tanlang")
+    if await db.th_rooms_of(user["id"], int(time.time()) - 6 * 3600) >= 2:
+        return _bad("Bir vaqtda ko'pi bilan 2 ta xona ochish mumkin")
+    if not await theatre.ensure_meta(mv):
+        return _bad("Bu kino teatr uchun mos emas (format yoki hajmi). Boshqasini tanlang")
+    pw = str(body.get("password") or "").strip()[:20]
+    salt = theatre.secrets.token_hex(8) if pw else ""
+    rid = theatre.new_room_id()
+    while await db.th_room_get(rid):
+        rid = theatre.new_room_id()
+    await db.th_room_add({"id": rid, "owner": user["id"], "owner_name": _uname(user), "title": title,
+                          "movie_id": mv["id"], "salt": salt, "pw": theatre.hash_pw(salt, pw)})
+    return web.json_response({"ok": True, "id": rid})
+
+
+async def api_th_room_join(request: web.Request):
+    _th_on()
+    user = _auth(request)
+    body = await request.json()
+    rid = str(body.get("id") or "").strip().upper()
+    room = await db.th_room_get(rid)
+    if not room:
+        return _bad("Bunday xona topilmadi")
+    if not await db.th_member_has(rid, user["id"]) and room["pw"]:
+        if not theatre.pw_allowed(user["id"], rid):
+            return web.json_response({"error": "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring"}, status=429)
+        if not theatre.check_pw(room, str(body.get("password") or "")):
+            theatre.pw_failed(user["id"], rid)
+            return _bad("Parol noto'g'ri")
+    await db.th_member_add(rid, user["id"])
+    return web.json_response({"ok": True, "id": rid})
+
+
+async def api_th_room_get(request: web.Request):
+    _th_on()
+    user = _auth(request)
+    rid = request.match_info["id"].upper()
+    room = await db.th_room_get(rid)
+    if not room:
+        raise web.HTTPNotFound(reason="Xona topilmadi yoki yopilgan")
+    if not await db.th_member_has(rid, user["id"]):
+        if room["pw"]:
+            raise web.HTTPForbidden(reason="locked")
+        await db.th_member_add(rid, user["id"])
+    mv = await db.get_movie(room["movie_id"])
+    now = time.time()
+    theatre.seen(rid, user["id"])
+    if now - room["last_active"] > 60:
+        await db.th_room_touch(rid)
+    return web.json_response({
+        "room": {"id": rid, "title": room["title"], "owner": room["owner_name"], "host": room["owner"] == user["id"],
+                 "locked": bool(room["pw"]), "playing": bool(room["playing"]), "pos": theatre.room_pos(room, now),
+                 "now": now,
+                 "movie": {"id": mv["id"], "title": mv["title"], "duration": mv["duration"],
+                           "ep": mv["ep"] if mv["series_id"] else None}},
+        "viewers": theatre.viewers(rid),
+    })
+
+
+async def api_th_room_state(request: web.Request):
+    user = _auth(request)
+    rid = request.match_info["id"].upper()
+    room = await db.th_room_get(rid)
+    if not room:
+        raise web.HTTPNotFound(reason="Xona topilmadi")
+    if room["owner"] != user["id"]:
+        raise web.HTTPForbidden(reason="Faqat xona egasi boshqaradi")
+    body = await request.json()
+    pos = max(float(body.get("pos") or 0), 0.0)
+    await db.th_room_state(rid, bool(body.get("playing")), pos, time.time())
+    return web.json_response({"ok": True})
+
+
+async def api_th_room_delete(request: web.Request):
+    user = _auth(request)
+    rid = request.match_info["id"].upper()
+    room = await db.th_room_get(rid)
+    if not room:
+        raise web.HTTPNotFound(reason="Xona topilmadi")
+    if room["owner"] != user["id"] and not perms.is_staff(user["id"]):
+        raise web.HTTPForbidden(reason="Faqat xona egasi yopa oladi")
+    await db.th_room_del(rid)
+    return web.json_response({"ok": True})
+
+
+# — Premyera (admin) —
+async def api_admin_th(request: web.Request):
+    user = _admin(request, "publish")
+    pend = [r for r in await db.q_all(
+        "SELECT id, title, year, kind FROM movies WHERE status='pending' AND series_id IS NULL ORDER BY id DESC LIMIT 100")
+        if perms.can_kind(user["id"], r["kind"])]
+    sched = await db.q_all(
+        "SELECT id, title, premiere_at FROM movies WHERE status='premiere' ORDER BY premiere_at")
+    return web.json_response({
+        "ready": theatre.available(), "day": theatre.tomorrow(), "slots": theatre.premiere_slots(),
+        "pending": [{"id": r["id"], "title": r["title"], "year": r["year"]} for r in pend],
+        "scheduled": [{"id": r["id"], "title": r["title"], "time": theatre.hhmm(r["premiere_at"]),
+                       "day": theatre.day_of(r["premiere_at"]), "started": r["premiere_at"] <= time.time()}
+                      for r in sched],
+    })
+
+
+async def api_admin_th_premiere(request: web.Request):
+    user = _admin(request, "publish")
+    if not theatre.available():
+        return _bad("Teatr ulanmagan (API_ID / API_HASH ni tekshiring)")
+    body = await request.json()
+    mv = await db.get_movie(int(body.get("movie_id") or 0))
+    idx = int(body.get("idx", -1))
+    if not mv or mv["status"] != "pending" or mv["series_id"]:
+        return _bad("Premyera uchun «kutilayotgan» yakka kino tanlang")
+    _kind_ok(user, mv["kind"])
+    if not 0 <= idx < theatre.SLOTS:
+        return _bad("Vaqtni tanlang")
+    if not await theatre.ensure_meta(mv):
+        return _bad("Bu video teatrga mos emas (mp4 emas, juda uzun yoki ochilmadi)")
+    ts = theatre.premiere_ts(idx)
+    if await db.q_one("SELECT 1 FROM movies WHERE status='premiere' AND premiere_at=?", (ts,)):
+        return _bad("Bu vaqtga boshqa premyera qo'yilgan")
+    await db.q_run("UPDATE movies SET status='premiere', premiere_at=? WHERE id=? AND status='pending'", (ts, mv["id"]))
+    return web.json_response({"ok": True})
+
+
+async def api_admin_th_cancel(request: web.Request):
+    user = _admin(request, "publish")
+    body = await request.json()
+    mv = await db.get_movie(int(body.get("movie_id") or 0))
+    if not mv or mv["status"] != "premiere":
+        raise web.HTTPNotFound(reason="not found")
+    _kind_ok(user, mv["kind"])
+    if (mv["premiere_at"] or 0) <= time.time():
+        return _bad("Premyera boshlangan — bekor qilib bo'lmaydi")
+    await db.q_run("UPDATE movies SET status='pending', premiere_at=NULL WHERE id=?", (mv["id"],))
+    return web.json_response({"ok": True})
+
+
 def make_app(bot) -> web.Application:
     app = web.Application(middlewares=[errors], client_max_size=60 * 1024 * 1024)
     app["bot"] = bot
@@ -885,6 +1173,21 @@ def make_app(bot) -> web.Application:
     r.add_get("/api/chat", api_chat_list)
     r.add_post("/api/chat", api_chat_send)
     r.add_post("/api/chat/delete", api_chat_delete)
+    r.add_get("/api/theatre/state", api_th_state)
+    r.add_get("/api/theatre/plan", api_th_plan)
+    r.add_get(r"/api/theatre/v/{id:\d+}", api_th_video)
+    r.add_get("/api/theatre/chat", api_th_chat_list)
+    r.add_post("/api/theatre/chat", api_th_chat_send)
+    r.add_post("/api/theatre/chat/delete", api_th_chat_delete)
+    r.add_get("/api/theatre/rooms", api_th_rooms)
+    r.add_post("/api/theatre/room", api_th_room_create)
+    r.add_post("/api/theatre/room/join", api_th_room_join)
+    r.add_get("/api/theatre/room/{id}", api_th_room_get)
+    r.add_post("/api/theatre/room/{id}/state", api_th_room_state)
+    r.add_post("/api/theatre/room/{id}/delete", api_th_room_delete)
+    r.add_get("/api/admin/theatre", api_admin_th)
+    r.add_post("/api/admin/theatre/premiere", api_admin_th_premiere)
+    r.add_post("/api/admin/theatre/cancel", api_admin_th_cancel)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)

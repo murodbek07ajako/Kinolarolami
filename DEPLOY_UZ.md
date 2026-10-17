@@ -85,3 +85,18 @@ Poster videoning Telegramdagi kadridan olinadi. Almashtirish: `/poster 12` yoki 
 Avval turini tanlaysiz (Kino / Multfilm / Anime / Serial). Multfilm va anime uchun «Qismli» tugmasi bor. Qismli bo'lsa mavjud serialni tanlab qism raqamini yozasiz (yoki yangi yaratasiz). Saqlagach botga videoni yuborasiz.
 
 ⚠️ Yuklab bo'lgach zaxira nusxa oling — Render qayta ishga tushsa baza o'chadi (bot zaxirani o'zi ham yuborib turadi).
+
+## 🎭 Teatr (ommaviy va shaxsiy xonalar)
+Yoqish uchun Render → Environment ga qo'shing:
+- `API_ID` va `API_HASH` — my.telegram.org → API development tools dan
+- `THEATRE_TZ` = `5` (O'zbekiston vaqti; o'zgartirish shart emas)
+
+Bot qayta ishga tushgach katalog tepasida **🎭** tugmasi chiqadi. Loglarda «Teatr: MTProto ulandi» yozuvi bo'lishi kerak.
+
+**Ommaviy teatr:** har kuni 08:00–24:00, 2 soatlik 8 slot. Reja 00:00 da o'zi tuziladi: 1 serial qismi (har kuni shu soatda), 2 multfilm, qolgani kino. Kinolar katalogdan olinadi (faqat mp4, 2 soatgacha). Kinoning hajmi bot orqali asta-sekin aniqlanadi (eski kinolar uchun bir necha daqiqa–soat ketishi mumkin).
+
+**Premyera:** Admin → «Qo'shish» da «⭐ Premyera» ni yoqing (yoki 🎭 → ⭐ Premyera dan kutilayotgan kinoni tanlang). Kino ertaga tanlangan vaqtda teatrda chiqadi, tugagach katalogga qo'shiladi.
+
+**Video:** hozirgi va keyingi kino diskka yuklanadi, eskisi o'chadi. Joy yetmasa yoki yuklanmagan bo'lsa — to'g'ridan-to'g'ri Telegramdan oqim.
+
+Build xato bersa (tgcrypto): `requirements.txt` dan `tgcrypto` qatorini o'chiring — ishlaydi, lekin sekinroq.

@@ -21,6 +21,7 @@ import db
 import keyboards as kb
 import perms
 import services as svc
+import theatre
 
 router = Router()
 
@@ -254,7 +255,7 @@ def _thumb_id(media) -> str:
 async def add_video(m: Message, state: FSMContext):
     media = m.video or m.document
     data = {"file_id": media.file_id, "file_type": "video" if m.video else "document",
-            "thumb": _thumb_id(media), "step": 0}
+            "thumb": _thumb_id(media), "step": 0, **db.media_meta(media)}
     if m.video:
         data["auto_quality"] = cp.quality_from_size(m.video.width, m.video.height)
     await state.update_data(**data)
@@ -380,6 +381,7 @@ async def draft_video(m: Message, bot: Bot):
         **draft,
         "file_id": media.file_id,
         "file_type": "video" if m.video else "document",
+        **db.media_meta(media),
     }
     if not data.get("poster"):
         data["poster"] = _thumb_id(media)
@@ -403,18 +405,35 @@ async def draft_video(m: Message, bot: Bot):
         await db.clear_draft(m.from_user.id)
         await m.answer(deny)
         return
+    pidx = data.pop("premiere_idx", None)  # Mini App'da «Premyera» belgilangan bo'lsa
+    if pidx is not None and not data.get("series_id") and theatre.available():
+        data["status"] = "premiere"
+        data["premiere_at"] = theatre.premiere_ts(int(pidx))
+    else:
+        pidx = None
     try:
         movie_id = await db.add_movie(data)
     except sqlite3.IntegrityError:
         await db.clear_draft(m.from_user.id)
         await m.answer(f"❌ {data.get('ep')}-qism allaqachon mavjud. Boshqa raqam bilan qaytadan boshlang.")
         return
+    if pidx is not None:  # video teatrga mosligini tekshiramiz (hajm/format)
+        if not await theatre.ensure_meta(await db.get_movie(movie_id)):
+            await db.q_run("UPDATE movies SET status='live', premiere_at=NULL WHERE id=?", (movie_id,))
+            data["status"], pidx = "live", None
+            await m.answer("⚠️ Bu video teatrga mos emas (mp4 emas yoki 2 soatdan uzun), shuning uchun "
+                           "premyera qilinmadi — oddiy kino sifatida katalogga qo'shildi.")
     if data.get("series_id") and data.get("poster"):
         ser = await db.get_series(data["series_id"])
         if ser and not ser["poster_id"]:
             await db.set_series_poster(ser["id"], data["poster"])
     await db.clear_draft(m.from_user.id)
     await announce_saved(m, movie_id, data)
+    if pidx is not None:
+        await m.answer(
+            f"⭐ <b>Premyera:</b> ertaga <b>{theatre.premiere_slots()[int(pidx)]['time']}</b> da teatrda chiqadi. "
+            "Tugagandan keyin kino katalogga qo'shiladi (shu paytgacha katalogda ko'rinmaydi)."
+        )
 
 
 @router.message(StateFilter(default_state), F.photo)

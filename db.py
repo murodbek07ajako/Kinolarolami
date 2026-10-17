@@ -44,7 +44,11 @@ CREATE TABLE IF NOT EXISTS movies(
   kind TEXT NOT NULL DEFAULT 'kino',
   series_id INTEGER,
   ep INTEGER,
-  num INTEGER
+  num INTEGER,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  duration INTEGER NOT NULL DEFAULT 0,
+  mime TEXT NOT NULL DEFAULT '',
+  premiere_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS series(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +111,41 @@ CREATE TABLE IF NOT EXISTS chat_messages(
   text TEXT NOT NULL,
   at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS theatre_slots(
+  day TEXT NOT NULL,
+  idx INTEGER NOT NULL,
+  movie_id INTEGER NOT NULL,
+  tag TEXT NOT NULL DEFAULT 'film',
+  PRIMARY KEY(day, idx)
+);
+CREATE TABLE IF NOT EXISTS theatre_rooms(
+  id TEXT PRIMARY KEY,
+  owner INTEGER NOT NULL,
+  owner_name TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL,
+  movie_id INTEGER NOT NULL,
+  salt TEXT NOT NULL DEFAULT '',
+  pw TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  last_active INTEGER NOT NULL,
+  playing INTEGER NOT NULL DEFAULT 0,
+  pos REAL NOT NULL DEFAULT 0,
+  pos_at REAL NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS theatre_members(
+  room TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  PRIMARY KEY(room, user_id)
+);
+CREATE TABLE IF NOT EXISTS theatre_chat(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_thchat_room ON theatre_chat(room, id);
 CREATE INDEX IF NOT EXISTS idx_views_at ON views(at);
 CREATE INDEX IF NOT EXISTS idx_views_user ON views(user_id, at);
 CREATE INDEX IF NOT EXISTS idx_movies_views ON movies(views DESC);
@@ -141,6 +180,11 @@ async def _migrate() -> None:
             await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} INTEGER")
     if "status" not in cols:
         await _db.execute("ALTER TABLE movies ADD COLUMN status TEXT NOT NULL DEFAULT 'live'")
+    # Teatr uchun: video hajmi/davomiyligi/formati va premyera vaqti
+    for name, ddl in (("file_size", "INTEGER NOT NULL DEFAULT 0"), ("duration", "INTEGER NOT NULL DEFAULT 0"),
+                      ("mime", "TEXT NOT NULL DEFAULT ''"), ("premiere_at", "INTEGER")):
+        if name not in cols:
+            await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} {ddl}")
     for name, ddl in (("kind", "TEXT NOT NULL DEFAULT 'kino'"), ("series_id", "INTEGER"), ("ep", "INTEGER")):
         if name not in cols:
             await _db.execute(f"ALTER TABLE movies ADD COLUMN {name} {ddl}")
@@ -308,14 +352,15 @@ async def add_movie(d: dict) -> int:
         return await _run(
             """INSERT INTO movies(title, description, year, genre, genre_lc, country, language, quality,
                                   file_id, file_type, poster_id, search_text, created_at, src_chat, src_msg, status,
-                                  kind, series_id, ep, cover_id, num)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                  kind, series_id, ep, cover_id, num, file_size, duration, mime, premiere_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 d["title"], d.get("description", ""), d.get("year", ""), d.get("genre", ""), genre_lc,
                 d.get("country", ""), d.get("language", ""), d.get("quality", ""),
                 d["file_id"], d.get("file_type", "video"), d.get("poster", ""), search, int(time.time()),
                 d.get("src_chat"), d.get("src_msg"), d.get("status", "live"),
                 d.get("kind", "kino"), d.get("series_id") or None, d.get("ep"), d.get("cover", ""), num,
+                int(d.get("file_size") or 0), int(d.get("duration") or 0), d.get("mime") or "", d.get("premiere_at"),
             ),
         )
 
@@ -889,6 +934,128 @@ async def user_name(uid: int) -> str:
     if not row:
         return ""
     return (row["full_name"] or "").strip() or (f"@{row['username']}" if row["username"] else "")
+
+
+# ───────────── Teatr ─────────────
+def media_meta(media) -> dict:
+    """Telegram video/fayldan teatr uchun kerakli ma'lumot."""
+    return {
+        "file_size": int(getattr(media, "file_size", 0) or 0),
+        "duration": int(getattr(media, "duration", 0) or 0),
+        "mime": getattr(media, "mime_type", "") or "",
+    }
+
+
+async def q_all(sql: str, params=()):
+    return await _all(sql, params)
+
+
+async def q_one(sql: str, params=()):
+    return await _one(sql, params)
+
+
+async def q_run(sql: str, params=()) -> int:
+    return await _run(sql, params)
+
+
+async def th_get_slots(day: str) -> list:
+    return await _all("SELECT * FROM theatre_slots WHERE day=? ORDER BY idx", (day,))
+
+
+async def th_set_slots(day: str, rows: list[tuple[int, int, str]]) -> None:
+    """rows: (idx, movie_id, tag). Kun rejasi bir marta yoziladi."""
+    await _db.execute("DELETE FROM theatre_slots WHERE day=?", (day,))
+    await _db.executemany(
+        "INSERT INTO theatre_slots(day, idx, movie_id, tag) VALUES(?,?,?,?)",
+        [(day, i, m, t) for i, m, t in rows],
+    )
+    await _db.commit()
+
+
+async def th_set_meta(mid: int, size: int, duration: int = 0, mime: str = "") -> None:
+    await _run(
+        "UPDATE movies SET file_size=?, duration=CASE WHEN ?>0 THEN ? ELSE duration END, "
+        "mime=CASE WHEN ?!='' THEN ? ELSE mime END WHERE id=?",
+        (size, duration, duration, mime, mime, mid),
+    )
+
+
+async def th_room_add(d: dict) -> None:
+    now = time.time()
+    await _run(
+        """INSERT INTO theatre_rooms(id, owner, owner_name, title, movie_id, salt, pw, created_at, last_active, pos_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?)""",
+        (d["id"], d["owner"], d["owner_name"], d["title"], d["movie_id"], d["salt"], d["pw"], int(now), int(now), now),
+    )
+    await _run("INSERT OR IGNORE INTO theatre_members(room, user_id) VALUES(?,?)", (d["id"], d["owner"]))
+
+
+async def th_room_get(rid: str):
+    return await _one("SELECT * FROM theatre_rooms WHERE id=?", (rid,))
+
+
+async def th_rooms_list(since: int, limit: int = 30):
+    return await _all(
+        "SELECT r.*, m.title AS mtitle FROM theatre_rooms r JOIN movies m ON m.id=r.movie_id "
+        "WHERE r.last_active >= ? ORDER BY r.last_active DESC LIMIT ?", (since, limit))
+
+
+async def th_rooms_of(owner: int, since: int) -> int:
+    row = await _one("SELECT COUNT(*) c FROM theatre_rooms WHERE owner=? AND last_active>=?", (owner, since))
+    return row["c"]
+
+
+async def th_room_state(rid: str, playing: bool, pos: float, pos_at: float) -> None:
+    await _run("UPDATE theatre_rooms SET playing=?, pos=?, pos_at=?, last_active=? WHERE id=?",
+               (1 if playing else 0, pos, pos_at, int(time.time()), rid))
+
+
+async def th_room_touch(rid: str) -> None:
+    await _run("UPDATE theatre_rooms SET last_active=? WHERE id=?", (int(time.time()), rid))
+
+
+async def th_room_del(rid: str) -> None:
+    await _db.execute("DELETE FROM theatre_rooms WHERE id=?", (rid,))
+    await _db.execute("DELETE FROM theatre_members WHERE room=?", (rid,))
+    await _db.execute("DELETE FROM theatre_chat WHERE room=?", (rid,))
+    await _db.commit()
+
+
+async def th_rooms_cleanup(older_than: int) -> None:
+    for r in await _all("SELECT id FROM theatre_rooms WHERE last_active < ?", (older_than,)):
+        await th_room_del(r["id"])
+    await _run("DELETE FROM theatre_chat WHERE room LIKE 'pub:%' AND at < ?", (int(time.time()) - 2 * 86400,))
+
+
+async def th_member_add(rid: str, uid: int) -> None:
+    await _run("INSERT OR IGNORE INTO theatre_members(room, user_id) VALUES(?,?)", (rid, uid))
+
+
+async def th_member_has(rid: str, uid: int) -> bool:
+    return bool(await _one("SELECT 1 FROM theatre_members WHERE room=? AND user_id=?", (rid, uid)))
+
+
+async def th_chat_add(room: str, uid: int, name: str, text: str) -> dict:
+    now = int(time.time())
+    mid = await _run("INSERT INTO theatre_chat(room, user_id, name, text, at) VALUES(?,?,?,?,?)",
+                     (room, uid, name, text, now))
+    return {"id": mid, "uid": uid, "name": name, "text": text, "at": now}
+
+
+async def th_chat_list(room: str, after: int = 0, limit: int = 50) -> list:
+    if after > 0:
+        return await _all("SELECT * FROM theatre_chat WHERE room=? AND id>? ORDER BY id LIMIT ?", (room, after, limit))
+    rows = await _all("SELECT * FROM theatre_chat WHERE room=? ORDER BY id DESC LIMIT ?", (room, limit))
+    return list(reversed(rows))
+
+
+async def th_chat_last_at(uid: int) -> int:
+    row = await _one("SELECT MAX(at) m FROM theatre_chat WHERE user_id=?", (uid,))
+    return (row["m"] or 0) if row else 0
+
+
+async def th_chat_delete(mid: int) -> None:
+    await _run("DELETE FROM theatre_chat WHERE id=?", (mid,))
 
 
 # ───────────── Umumiy chat ─────────────

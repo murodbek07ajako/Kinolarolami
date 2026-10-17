@@ -15,6 +15,7 @@ import backup
 import config
 import db
 import perms
+import theatre
 import user_handlers as user
 import web
 
@@ -104,10 +105,16 @@ async def main() -> None:
             except Exception:
                 pass
     backup_task = asyncio.create_task(backup.periodic(bot))
+    theatre_task = None
+    if await theatre.start():  # API_ID / API_HASH bo'lsa teatr ishga tushadi
+        theatre_task = asyncio.create_task(theatre.run(bot))
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         backup_task.cancel()
+        if theatre_task:
+            theatre_task.cancel()
+        await theatre.stop()
         await runner.cleanup()
         await db.close()
         await bot.session.close()

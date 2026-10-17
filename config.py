@@ -25,6 +25,11 @@ ADMIN_IDS: set[int] = {
 # Mini App chatidagi «Adminga murojaat» tugmasi shu foydalanuvchining lichkasini ochadi (@siz, @ belgisiz ham bo'ladi).
 # Bo'sh qoldirsangiz — birinchi bosh adminning ID si ishlatiladi.
 ADMIN_CONTACT: str = os.getenv("ADMIN_CONTACT", "").strip().lstrip("@")
+# Teatr (MTProto orqali kinoni Telegramdan oqim qilib berish). my.telegram.org dan olinadi.
+API_ID: int = int(os.getenv("API_ID", "0") or 0) if os.getenv("API_ID", "").strip().isdigit() else 0
+API_HASH: str = os.getenv("API_HASH", "").strip()
+THEATRE_ON: bool = bool(API_ID and API_HASH)
+THEATRE_TZ: int = int(os.getenv("THEATRE_TZ", "5") or 5)  # vaqt zonasi (UTC+5 — O'zbekiston)
 BOT_TITLE: str = os.getenv("BOT_TITLE", "MEGA CINEMA").strip()
 PORT: int = int(os.getenv("PORT", "8080"))
 DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "data" / "bot.db"))

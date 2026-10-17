@@ -111,7 +111,7 @@ async def import_episode(bot: Bot, series, media, ftype: str, caption: str | Non
         "genre": series["genre"], "country": series["country"], "language": series["language"],
         "quality": quality, "file_id": media.file_id, "file_type": ftype, "poster": thumb,
         "src_chat": src_chat, "src_msg": src_msg, "status": "pending",
-        "kind": series["kind"], "series_id": series["id"], "ep": ep,
+        "kind": series["kind"], "series_id": series["id"], "ep": ep, **db.media_meta(media),
     }
     try:
         movie_id = await db.add_movie(data)
@@ -158,6 +158,7 @@ async def import_media(bot: Bot, media, ftype: str, caption: str | None,
         "src_msg": src_msg,
         "status": "pending",
         "kind": kind,
+        **db.media_meta(media),
     }
     try:
         movie_id = await db.add_movie(data)

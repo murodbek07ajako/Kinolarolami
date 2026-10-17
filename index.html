@@ -288,7 +288,77 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 .abar{flex:none;padding:8px 14px 14px;border-top:1px solid var(--line)}
 .abtn{width:100%;padding:14px;border-radius:14px;background:var(--grad);color:var(--onacc);font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(var(--a1rgb),.35)}
 .abtn:active{transform:scale(.98)}
+/* ── Teatr ── */
+.tbtn{position:absolute;right:14px;top:12px;width:42px;height:42px;border-radius:13px;background:var(--card);border:1px solid var(--line);font-size:20px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.tbtn:active{transform:scale(.92)}
+.tbtn[hidden]{display:none}
+.gear:not([hidden])~.tbtn{right:64px}
+.top:has(.gear:not([hidden])) .brand{padding-right:104px}
+.th{position:fixed;inset:0;z-index:80;background:#03040a;color:#e9ecf7;display:flex;flex-direction:column;opacity:0;visibility:hidden;transform:translateY(24px);transition:opacity .3s,transform .3s,visibility 0s .3s;padding-top:env(safe-area-inset-top)}
+.th.on{opacity:1;visibility:visible;transform:none;transition:opacity .3s,transform .3s}
+.th-top{flex:none;display:flex;align-items:center;gap:8px;padding:12px 14px}
+.th-back{flex:none;width:36px;height:36px;border-radius:12px;background:#0d101c;border:1px solid #1b2038;font-size:16px}
+.th-title{flex:1;min-width:0;font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th-right{flex:none;display:flex;gap:6px;align-items:center}
+.th-chip{flex:none;padding:7px 11px;border-radius:99px;background:#0d101c;border:1px solid #1b2038;font-size:12.5px;font-weight:700;color:#e9ecf7}
+.th-body{flex:1;min-height:0;overflow-y:auto;padding:4px 14px calc(24px + env(safe-area-inset-bottom))}
+.th-body.hall-mode{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.thc{display:block;width:100%;text-align:left;padding:18px;border-radius:20px;margin-top:14px;background:linear-gradient(145deg,#0f1324,#080a14);border:1px solid #1b2038;position:relative;overflow:hidden;color:#e9ecf7}
+.thc::after{content:"";position:absolute;right:-30px;top:-30px;width:130px;height:130px;border-radius:50%;background:radial-gradient(rgba(var(--a1rgb),.28),transparent 70%);pointer-events:none}
+.thc .ti{font-size:34px}
+.thc b{display:block;font-size:18px;margin-top:6px}
+.thc span{display:block;color:#8f98b5;font-size:13px;margin-top:4px}
+.thc .lv{color:#ff7a8e;font-weight:700}
+.thlink{margin-top:10px;padding:9px 14px;border-radius:12px;background:#0d101c;border:1px solid #1b2038;font-size:13px;font-weight:700;color:#e9ecf7}
+.hall{flex:1;min-height:0;display:flex;flex-direction:column}
+.stage{flex:none;position:relative;padding:4px 0 6px;background:radial-gradient(120% 100% at 50% 0,rgba(var(--a1rgb),.12),transparent 62%)}
+.vbox{position:relative;width:100%;aspect-ratio:16/9;background:#000;box-shadow:0 0 70px 6px rgba(var(--a1rgb),.16),0 26px 60px rgba(0,0,0,.95);overflow:hidden}
+.vbox video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.vbox.nc video{pointer-events:none}
+.vov{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;padding:14px;background:rgba(0,0,0,.82)}
+.vov[hidden]{display:none}
+.vov .big{font-size:38px;line-height:1}
+.vov b{font-size:15.5px;max-width:92%}
+.vov small{color:#9aa3c2;font-size:12.5px}
+.vplay{margin-top:6px;padding:11px 24px;border-radius:99px;background:var(--grad);color:var(--onacc);font-weight:800;font-size:15px;box-shadow:0 6px 20px rgba(var(--a1rgb),.4)}
+.vctl{position:absolute;right:8px;bottom:8px;z-index:3;display:flex;gap:6px}
+.vctl button{width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.55);font-size:15px;color:#fff}
+.seats{height:14px;margin-top:8px;background:radial-gradient(circle at 11px 16px,#0a0d19 10px,transparent 11px) 0 0/22px 14px repeat-x}
+.hinfo{flex:none;padding:2px 14px 8px}
+.hinfo .nm{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hinfo .sm{color:#8f98b5;font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptag{font-size:10.5px;padding:2px 8px;border-radius:99px;background:var(--grad);color:var(--onacc);font-weight:800}
+.hchat{flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid #151a2e;background:#05060d}
+.thm{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,.72);display:flex;align-items:flex-end}
+.thm-box{width:100%;max-height:84%;overflow:auto;background:#0a0d18;border-radius:22px 22px 0 0;border-top:1px solid #1b2038;padding:16px 14px calc(18px + env(safe-area-inset-bottom))}
+.thm-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.thm-hd b{font-size:17px}
+.pl{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:14px;background:#0f1324;border:1px solid #1b2038;margin-top:8px;width:100%;text-align:left;color:#e9ecf7}
+.pl.now{border-color:var(--a1);background:rgba(var(--a1rgb),.12)}
+.pl.done{opacity:.5}
+.pl .tm{flex:none;font-weight:800;font-size:15px;min-width:48px}
+.pl .tx{flex:1;min-width:0}
+.pl .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .tx span{color:#8f98b5;font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .st{flex:none;font-size:11.5px;font-weight:800;color:#8f98b5}
+.pl.now .st{color:#ff7a8e}
+.th .inp{background:#0d101c;border-color:#1b2038;color:#e9ecf7}
+.th .lbl{color:#8f98b5}
+.th .panel{background:#0a0d18;border-color:#1b2038}
+.th .note{color:#8f98b5;font-size:12.5px}
+.joinrow{display:flex;gap:8px;margin-top:12px}
+.joinrow .inp{flex:1;min-width:0;text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800}
+.joinrow button{flex:none;padding:0 18px;border-radius:12px;background:var(--grad);color:var(--onacc);font-weight:800}
+.pks{margin-top:8px;display:grid;gap:6px}
+.pk{padding:10px 12px;border-radius:12px;background:#0d101c;border:1px solid #1b2038;text-align:left;font-size:14px;font-weight:600;color:#e9ecf7;width:100%}
+.pk small{display:block;color:#8f98b5;font-weight:500;font-size:12px}
+.pksel{margin-top:8px;padding:10px 12px;border-radius:12px;background:rgba(var(--a1rgb),.12);border:1px solid var(--a1);display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+.pksel span{flex:1;min-width:0}
+.th .qchips button{color:#8f98b5}
+.th .qchips button.on{color:#fff}
+.th .qchips button:disabled{opacity:.35}
 </style>
+
 </head>
 <body>
 <canvas id="fx"></canvas>
@@ -296,6 +366,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 <header class="top">
   <div class="brand"><span class="logo-wrap" id="logoWrap"><img src="/logo.png" alt="Mega Cinema"></span><span class="brand-name">MEGA CINEMA</span></div>
   <button class="gear" id="gear" hidden aria-label="Admin panel">⚙️</button>
+  <button class="tbtn" id="thBtn" hidden aria-label="Teatr">🎭</button>
   <label class="search">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="q" type="search" placeholder="Kino nomi, janr yoki yil..." autocomplete="off" enterkeyhint="search">
@@ -382,6 +453,10 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   </div>
 </section>
 
+<section class="th" id="th" aria-modal="true">
+  <div class="th-top"><button class="th-back" id="thBack" aria-label="Orqaga">←</button><div class="th-title" id="thTitle">🎭 Teatr</div><div class="th-right" id="thRight"></div></div>
+  <div class="th-body" id="thBody"></div>
+</section>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1100,8 +1175,9 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
 
   TABS.add = async () => {
     const wrap = el('div');
-    let draft = null, series = [];
+    let draft = null, series = [], thi = null;
     try { draft = (await api('/api/admin/draft')).draft; } catch (e) {}
+    try { if (ME.theatre && can('publish')) thi = await api('/api/admin/theatre'); } catch (e) {}
     try { series = (await api('/api/admin/series')).items; } catch (e) {}
     if (draft) {
       const n = el('div', 'notice');
@@ -1119,12 +1195,26 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     const panel = el('div', 'panel');
     panel.appendChild(el('h3', null, '🎬 Yangi qo\'shish'));
     panel.appendChild(el('div', 'note', 'Turini tanlang, ma\'lumotlarni to\'ldirib saqlang. Keyin bot videoning o\'zini so\'raydi — Telegram cheklovi tufayli faylni shu yerdan yuklab bo\'lmaydi.'));
-    const state = { kind: 'kino', parts: false, seriesId: 0 };
+    const state = { kind: 'kino', parts: false, seriesId: 0, premiere: -1 };
     const body = el('div');
     let F = {}, epInput = null, pick = null;
     const render = () => {
       body.replaceChildren(); F = {}; epInput = null; pick = null;
-      if (!state.parts) { F = movieForm(body); return; }
+      if (!state.parts) {
+        F = movieForm(body);
+        if (thi && thi.ready) {
+          const taken = new Set(thi.scheduled.filter(s => s.day === thi.day).map(s => s.time));
+          const row = el('div', 'swrow'), g = el('div', 'grow'); g.appendChild(el('div', 'nm', '⭐ Premyera'));
+          const dd = el('div', 'sm', 'Ertaga teatrda chiqadi, keyin katalogga qo\'shiladi'); dd.style.whiteSpace = 'normal'; g.appendChild(dd);
+          const sw = el('button', 'sw'); sw.setAttribute('aria-label', 'Premyera'); row.append(g, sw);
+          const ch = el('div', 'qchips');
+          const sync = () => { sw.classList.toggle('on', state.premiere >= 0); ch.hidden = state.premiere < 0; ch.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.i === state.premiere)); };
+          thi.slots.forEach(s => { const b = mkBtn('', s.time, () => { haptic(); state.premiere = s.idx; sync(); }); b.dataset.i = s.idx; if (taken.has(s.time)) b.disabled = true; ch.appendChild(b); });
+          sw.onclick = () => { haptic(); state.premiere = state.premiere >= 0 ? -1 : (thi.slots.find(s => !taken.has(s.time)) || { idx: -1 }).idx; sync(); };
+          body.append(row, ch); sync();
+        }
+        return;
+      }
       const mine = series.filter(x => x.kind === state.kind);
       if (!mine.some(x => x.id === state.seriesId)) state.seriesId = 0;
       body.appendChild(el('label', 'lbl', 'Qaysi serial/to\'plam?'));
@@ -1161,6 +1251,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       } else {
         if (!validMeta(F)) return;
         Object.assign(data, readForm(F));
+        if (state.premiere >= 0) data.premiere_idx = state.premiere;
       }
       save.disabled = true; save.textContent = '⏳ Saqlanmoqda...';
       try {
@@ -1746,6 +1837,409 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden && CH.open) chatPoll(false).then(chatTick); });
 
+  /* ───────── Teatr ───────── */
+  const TH = { on: false, stack: [], hall: null };
+  const TAGS = { film: '🎬 Kino', toon: '🧸 Multfilm', serial: '📺 Serial', premiere: '⭐ Premyera' };
+  const thName = m => m ? m.title + (m.ep ? ' · ' + m.ep + '-qism' : '') : '';
+  const thCount = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s % 60).padStart(2, '0'); };
+
+  function thModal(title, onClose) {
+    const wrap = el('div', 'thm'), box = el('div', 'thm-box'), hd = el('div', 'thm-hd');
+    const close = () => { wrap.remove(); if (onClose) onClose(); };
+    hd.appendChild(el('b', '', title)); hd.appendChild(mkBtn('th-back', '✕', close));
+    box.appendChild(hd); wrap.appendChild(box);
+    wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+    $('#th').appendChild(wrap);
+    return { box, close };
+  }
+  function thAsk(title, ph, secret) {
+    return new Promise(res => {
+      let done = false; const fin = v => { if (!done) { done = true; res(v); } };
+      const m = thModal(title, () => fin(null));
+      const i = el('input', 'inp'); i.placeholder = ph; i.maxLength = 40; i.autocomplete = 'off'; if (secret) i.type = 'password';
+      i.style.marginTop = '10px';
+      const ok = () => { const v = i.value.trim(); if (!v) return; fin(v); m.close(); };
+      i.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
+      const b = mkBtn('btn main full', 'Davom etish', ok); b.style.marginTop = '12px';
+      m.box.append(i, b); setTimeout(() => i.focus(), 150);
+    });
+  }
+
+  /* Ekranlar steki: 0-chi — bosh sahifa; orqaga bosilsa bitta qadam qaytadi, bosh sahifada yopiladi */
+  function thLeaveHall() {
+    const H = TH.hall; if (!H) return;
+    H.timers.forEach(clearInterval);
+    try { H.video.pause(); H.video.removeAttribute('src'); H.video.load(); } catch (e) {}
+    TH.hall = null;
+  }
+  function thRender() {
+    thLeaveHall();
+    const s = TH.stack[TH.stack.length - 1];
+    $('#thTitle').textContent = s.title; $('#thRight').replaceChildren();
+    const body = $('#thBody'); body.replaceChildren(); body.scrollTop = 0;
+    body.classList.toggle('hall-mode', !!s.hall);
+    s.build(body);
+  }
+  const thGo = (title, build, hall) => { TH.stack.push({ title, build, hall }); thRender(); };
+  const thReplace = (title, build, hall) => { TH.stack.pop(); thGo(title, build, hall); };
+  function thBack() { haptic(); if (TH.stack.length > 1) { TH.stack.pop(); thRender(); } else thClose(); }
+  function thOpen() {
+    if (!TH.on) { toast(ME && ME.admin ? 'Teatr ulanmagan: API_ID va API_HASH ni tekshiring' : 'Teatr hozircha yopiq'); return; }
+    haptic();
+    TH.stack = [{ title: '🎭 Teatr', build: thHome }];
+    $('#th').classList.add('on'); thRender();
+    try { tg.BackButton.onClick(thBack); tg.BackButton.show(); } catch (e) {}
+  }
+  function thClose() {
+    thLeaveHall(); $('#th').classList.remove('on'); document.querySelectorAll('#th .thm').forEach(x => x.remove());
+    try { tg.BackButton.offClick(thBack); tg.BackButton.hide(); } catch (e) {}
+  }
+
+  /* ── Bosh sahifa ── */
+  function thHome(body) {
+    const card = (ic, title, sub, fn) => {
+      const c = el('button', 'thc'); c.appendChild(el('div', 'ti', ic)); c.appendChild(el('b', '', title));
+      const s = el('span', '', sub); c.appendChild(s); c.onclick = () => { haptic(); fn(); };
+      body.appendChild(c); return s;
+    };
+    const sub1 = card('🌐', 'Ommaviy teatr', 'Hamma birga ko\'radi · har kuni 08:00–24:00', () => thGo('🌐 Ommaviy teatr', thHallPub, true));
+    api('/api/theatre/state').then(st => {
+      if (st.phase === 'live') { sub1.textContent = '🔴 Hozir: ' + thName(st.movie) + ' · 👁 ' + st.viewers; sub1.className = 'lv'; }
+      else if (st.phase === 'closed') sub1.textContent = '🌙 ' + st.opens_time + ' da ochiladi';
+      else sub1.textContent = '☕ Tanaffus' + (st.next && st.next.movie ? ' · ' + st.next.time + ' da: ' + st.next.movie.title : '');
+    }).catch(() => {});
+    body.appendChild(mkBtn('thlink', '📅 Bugungi reja', thPlan));
+    card('🏠', 'O\'z xonam', 'Do\'stlar bilan ochiq yoki parolli xona oching', () => thGo('🏠 Xonalar', thRooms));
+    if (ME && ME.admin && can('publish')) card('⭐', 'Premyera (admin)', 'Kinoni ertaga teatrda birinchi bo\'lib ko\'rsating', () => thGo('⭐ Premyera', thPremiere));
+  }
+
+  async function thPlan() {
+    const m = thModal('📅 Bugungi reja'); m.box.appendChild(el('div', 'note', '⏳ Yuklanmoqda...'));
+    try {
+      const d = await api('/api/theatre/plan'); m.box.lastChild.remove();
+      if (!d.items.some(i => i.movie)) m.box.appendChild(el('div', 'note', 'Reja hali tuzilmagan yoki kinolar yetarli emas.'));
+      d.items.forEach(i => {
+        const r = el('div', 'pl ' + i.state); r.appendChild(el('div', 'tm', i.time));
+        const tx = el('div', 'tx');
+        tx.appendChild(el('b', '', i.movie ? thName(i.movie) : '— reja yo\'q —'));
+        tx.appendChild(el('span', '', i.movie ? (TAGS[i.tag] || '') : ''));
+        r.appendChild(tx); r.appendChild(el('div', 'st', i.state === 'now' ? '🔴 Hozir' : i.state === 'done' ? '✅' : '⏳'));
+        m.box.appendChild(r);
+      });
+      m.box.appendChild(el('div', 'note', 'Reja har kuni 00:00 da yangilanadi. Har bir kino 2 soatlik slotda boshlanadi.')).style.marginTop = '12px';
+    } catch (e) { m.box.lastChild.textContent = errMsg(e); }
+  }
+
+  /* ── Chat (zal ichida) ── */
+  function thChat(wrap, room) {
+    const C = { last: 0, key: '', busy: false };
+    const msgs = el('div', 'cmsgs'), bar = el('div', 'cbar');
+    const ta = el('textarea'); ta.rows = 1; ta.maxLength = 300; ta.placeholder = 'Chatga yozing...'; ta.enterKeyHint = 'send';
+    const send = mkBtn('csend', '➤', () => doSend());
+    bar.append(ta, send); wrap.append(msgs, bar);
+    const empty = () => { if (!msgs.children.length) { const e = el('div', 'cempty'); e.id = 'thempty'; e.appendChild(el('div', 'e', '🍿')); e.appendChild(el('div', '', 'Hali xabar yo\'q. Birinchi bo\'lib yozing!')); msgs.appendChild(e); } };
+    const bubble = m => {
+      const b = el('div', 'cmsg' + (m.mine ? ' mine' : ''));
+      if (!m.mine) {
+        const n = el('div', 'cn'); n.style.color = 'hsl(' + nameHue(m.uid) + ',75%,68%)'; n.appendChild(el('span', '', m.name));
+        if (m.staff) n.appendChild(el('span', 'adm-b', 'ADMIN')); b.appendChild(n);
+      }
+      b.appendChild(el('div', 'ct', m.text));
+      const meta = el('div', 'cm', hhmm(m.at));
+      if (CH.staff) {
+        const d = el('button', 'cdel', '🗑');
+        d.onclick = async () => { try { await api('/api/theatre/chat/delete', { id: m.id }); b.remove(); empty(); } catch (e) { toast(errMsg(e)); } };
+        meta.prepend(d);
+      }
+      b.appendChild(meta); return b;
+    };
+    const add = (items, force) => {
+      if (!items.length) return;
+      const near = force || msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 90;
+      const ce = $('#thempty'); if (ce) ce.remove();
+      items.forEach(m => { if (m.id > C.last) { msgs.appendChild(bubble(m)); C.last = m.id; } });
+      if (near) msgs.scrollTop = msgs.scrollHeight;
+    };
+    C.poll = async first => {
+      try {
+        const d = await api('/api/theatre/chat?room=' + encodeURIComponent(room) + '&after=' + (first ? 0 : C.last));
+        if (C.key && d.key !== C.key) { C.key = d.key; msgs.replaceChildren(); C.last = 0; if (!first) return C.poll(true); }
+        C.key = d.key;
+        if (first) { msgs.replaceChildren(); C.last = 0; }
+        add(d.items, first); if (first) empty();
+      } catch (e) {}
+    };
+    async function doSend() {
+      const text = ta.value.trim(); if (!text || C.busy) return;
+      C.busy = true; send.disabled = true;
+      try { const r = await api('/api/theatre/chat', { room, text }); ta.value = ''; ta.style.height = 'auto'; C.key = r.key; add([r.item], true); }
+      catch (e) { toast(errMsg(e)); }
+      C.busy = false; send.disabled = false;
+    }
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 90) + 'px'; });
+    return C;
+  }
+
+  /* ── Zal (ommaviy va xona uchun umumiy) ── */
+  function thHall(body, cfg) {
+    const pub = cfg.mode === 'pub';
+    const H = TH.hall = { cfg, started: !!cfg.host, mid: 0, slotKey: '', startTs: 0, offset: 0, base: null, timers: [], cd: null, info: null };
+    const hall = el('div', 'hall'); body.appendChild(hall);
+    const stage = el('div', 'stage'), vbox = el('div', 'vbox' + (cfg.host ? '' : ' nc'));
+    const video = H.video = document.createElement('video');
+    video.playsInline = true; video.setAttribute('webkit-playsinline', ''); video.preload = 'auto'; video.disablePictureInPicture = true;
+    if (cfg.host) video.controls = true;
+    const ov = el('div', 'vov'); ov.hidden = true;
+    const ctl = el('div', 'vctl');
+    const mute = mkBtn('', '🔊', () => { video.muted = !video.muted; mute.textContent = video.muted ? '🔇' : '🔊'; });
+    const fs = mkBtn('', '⛶', () => { if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); else if (video.requestFullscreen) video.requestFullscreen(); else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen(); });
+    ctl.append(mute, fs); vbox.append(video, ov, ctl); stage.append(vbox, el('div', 'seats'));
+    const info = el('div', 'hinfo'), nm = el('div', 'nm'), sm = el('div', 'sm'); info.append(nm, sm);
+    const chatWrap = el('div', 'hchat');
+    hall.append(stage, info, chatWrap);
+    const chat = thChat(chatWrap, pub ? 'pub' : cfg.room);
+
+    const viewers = el('div', 'th-chip', '👁 0'); $('#thRight').appendChild(viewers);
+    if (pub) $('#thRight').appendChild(mkBtn('th-chip', '📅', thPlan));
+    else {
+      $('#thRight').appendChild(mkBtn('th-chip', '#' + cfg.room, () => { try { navigator.clipboard.writeText(cfg.room); } catch (e) {} toast('Xona kodi nusxalandi: ' + cfg.room, 2600); }));
+      if (cfg.host) $('#thRight').appendChild(mkBtn('th-chip', '🗑', async () => {
+        if (!confirm('Xona yopilsinmi?')) return;
+        try { await api('/api/theatre/room/' + cfg.room + '/delete', {}); toast('Xona yopildi'); thBack(); } catch (e) { toast(errMsg(e)); }
+      }));
+    }
+
+    const srv = () => Date.now() / 1000 + H.offset;
+    const expected = () => pub ? srv() - H.startTs : (H.base ? H.base.pos + (H.base.playing ? srv() - H.base.now : 0) : 0);
+    const seekTo = t => { try { const d = video.duration; video.currentTime = Math.max(0, isFinite(d) ? Math.min(t, d - 0.5) : t); } catch (e) {} };
+    const play = () => { const p = video.play(); if (p && p.catch) p.catch(() => { if (!cfg.host) { H.started = false; setOv('start'); } }); };
+
+    function setOv(kind, d) {
+      H.cd = null;
+      if (!kind) { ov.hidden = true; return; }
+      ov.hidden = false; ov.replaceChildren();
+      const add = (tag, cls, txt) => { const e = el(tag, cls, txt); ov.appendChild(e); return e; };
+      if (kind === 'start') {
+        add('div', 'big', '🎬'); add('b', '', thName(H.info) || 'Kino tayyor');
+        const mm = add('small', '', pub ? 'Hozirgi daqiqadan qo\'shilasiz' : 'Xona egasi qachon qo\'ysa, birga ko\'rasiz');
+        const b = el('button', 'vplay', '▶ Tomosha boshlash'); b.onclick = () => { haptic('medium'); start(); }; ov.appendChild(b);
+      } else if (kind === 'closed' || kind === 'break') {
+        add('div', 'big', kind === 'closed' ? '🌙' : '☕');
+        add('b', '', kind === 'closed' ? 'Teatr hozir yopiq' : 'Tanaffus');
+        if (d.title) add('small', '', 'Keyingi: ' + d.time + ' · ' + d.title);
+        const c = add('small', '', ''); H.cd = { to: d.to, node: c };
+      } else if (kind === 'empty') {
+        add('div', 'big', '📭'); add('b', '', 'Hozircha reja bo\'sh'); add('small', '', 'Kinolar tayyor bo\'lgach teatr o\'zi ishga tushadi');
+      } else if (kind === 'wait') {
+        add('div', 'big', '⏳'); add('b', '', d || 'Yuklanmoqda...');
+      } else if (kind === 'err') {
+        add('div', 'big', '⚠️'); add('b', '', d || 'Video ochilmadi'); add('small', '', 'Biroz kutib, qayta urinib ko\'ring');
+      }
+    }
+    function start() { H.started = true; setOv(null); seekTo(expected()); play(); }
+    function loadVideo(mid) {
+      video.onloadedmetadata = () => { seekTo(expected()); if (H.started) play(); };
+      video.onerror = () => { if (H.mid) setOv('err'); };
+      video.src = '/api/theatre/v/' + mid + '?a=' + encodeURIComponent(initData) + (pub ? '' : '&r=' + cfg.room);
+      video.load();
+    }
+    function stopVideo() { try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {} H.mid = 0; H.slotKey = ''; }
+    function head(m, tag) {
+      nm.replaceChildren(); nm.appendChild(document.createTextNode('🎬 ' + thName(m)));
+      if (tag === 'premiere') nm.appendChild(el('span', 'ptag', '⭐ PREMYERA'));
+      else if (tag && TAGS[tag]) nm.appendChild(el('span', 'ptag', TAGS[tag].replace(/^\S+\s/, '')));
+    }
+    function sync() {
+      if (!H.started || !H.mid || cfg.host) return;
+      if (pub || (H.base && H.base.playing)) {
+        if (video.readyState >= 1 && Math.abs(video.currentTime - expected()) > (pub ? 4 : 2.5)) seekTo(expected());
+        if (video.paused && !video.ended) play();
+      } else if (H.base) {
+        if (!video.paused) video.pause();
+        if (Math.abs(video.currentTime - H.base.pos) > 1) seekTo(H.base.pos);
+      }
+    }
+
+    /* Ommaviy teatr: server jadvali bo'yicha */
+    async function pollPub() {
+      try {
+        const st = await api('/api/theatre/state?w=1');
+        H.offset = st.now - Date.now() / 1000; viewers.textContent = '👁 ' + st.viewers;
+        if (st.phase === 'live') {
+          H.startTs = st.start; H.info = st.movie; head(st.movie, st.slot.tag);
+          sm.textContent = st.next && st.next.movie ? 'Keyingi: ' + st.next.time + ' · ' + thName(st.next.movie) : (st.last ? 'Bugungi oxirgi kino' : '');
+          if (H.mid !== st.movie.id || H.slotKey !== st.key) { stopVideo(); H.mid = st.movie.id; H.slotKey = st.key; loadVideo(st.movie.id); if (!H.started) setOv('start'); }
+          if (!H.started) { if (ov.hidden) setOv('start'); } else { if (!ov.hidden && !H.cd) setOv(null); sync(); }
+        } else {
+          stopVideo(); H.info = null; nm.textContent = '';
+          const n = st.next && st.next.movie ? st.next : null;
+          if (st.phase === 'closed') { sm.textContent = '🌙 Teatr ' + st.opens_time + ' da ochiladi'; setOv('closed', { to: st.opens, title: n ? thName(n.movie) : '', time: n ? n.time : '' }); }
+          else if (!st.slot.movie && !n) { sm.textContent = ''; setOv('empty'); }
+          else { sm.textContent = ''; setOv('break', { to: st.next ? st.next.start : st.end, title: n ? thName(n.movie) : '', time: n ? n.time : '' }); }
+        }
+      } catch (e) { if (!H.mid) setOv('wait', errMsg(e)); }
+    }
+    /* Xona: egasi boshqaradi, qolganlar kuzatadi */
+    async function pollRoom() {
+      try {
+        const d = await api('/api/theatre/room/' + cfg.room), r = d.room;
+        H.offset = r.now - Date.now() / 1000; viewers.textContent = '👁 ' + d.viewers;
+        H.base = { pos: r.pos, now: r.now, playing: r.playing };
+        if (!H.mid) { H.mid = r.movie.id; H.info = r.movie; head(r.movie, ''); sm.textContent = '🏠 ' + r.title + ' · ' + r.owner; loadVideo(r.movie.id); if (!cfg.host) setOv('start'); }
+        if (cfg.host) return;
+        if (!H.started) { if (ov.hidden) setOv('start'); return; }
+        sync();
+      } catch (e) {
+        if (e.status === 404) { stopVideo(); setOv('err', 'Xona yopilgan'); }
+      }
+    }
+    if (!pub && cfg.host) {
+      let t; const push = () => api('/api/theatre/room/' + cfg.room + '/state', { playing: !video.paused && !video.ended, pos: video.currentTime }).catch(() => {});
+      ['play', 'pause', 'seeked'].forEach(ev => video.addEventListener(ev, () => { clearTimeout(t); t = setTimeout(push, 150); }));
+      H.timers.push(setInterval(() => { if (!video.paused) push(); }, 5000));
+    }
+    video.addEventListener('ended', () => { if (pub) setOv('wait', 'Kino tugadi...'); });
+
+    const poll = pub ? pollPub : pollRoom;
+    setOv('wait', 'Zal tayyorlanmoqda...');
+    poll(); chat.poll(true);
+    H.timers.push(setInterval(poll, pub ? 5000 : 3000));
+    H.timers.push(setInterval(() => chat.poll(false), 3000));
+    H.timers.push(setInterval(() => {
+      if (H.cd) { const left = H.cd.to - srv(); H.cd.node.textContent = left > 0 ? '⏱ ' + thCount(left) : 'Boshlanmoqda...'; }
+    }, 1000));
+  }
+  const thHallPub = body => thHall(body, { mode: 'pub' });
+
+  /* ── Shaxsiy xonalar ── */
+  async function thEnterRoom(id, pw) {
+    id = id.trim().toUpperCase();
+    try {
+      if (pw) await api('/api/theatre/room/join', { id, password: pw });
+      const d = await api('/api/theatre/room/' + id);
+      thGo(d.room.title, b => thHall(b, { mode: 'room', room: id, host: d.room.host }), true);
+    } catch (e) {
+      if (e.status === 403 || /locked/.test(e.msg || '')) {
+        const p = await thAsk('🔒 Xona paroli', 'Parolni kiriting', true);
+        if (p) { try { await api('/api/theatre/room/join', { id, password: p }); return thEnterRoom(id); } catch (e2) { toast(errMsg(e2), 3000); } }
+      } else toast(errMsg(e), 3000);
+    }
+  }
+  function thRooms(body) {
+    const nb = mkBtn('btn main full', '➕ Xona yaratish', () => { haptic(); thGo('➕ Yangi xona', thCreate); }); nb.style.marginTop = '12px'; body.appendChild(nb);
+    const jr = el('div', 'joinrow'), ji = el('input', 'inp'); ji.placeholder = 'KOD'; ji.maxLength = 5; ji.autocomplete = 'off';
+    jr.append(ji, mkBtn('', 'Kirish', () => { if (ji.value.trim().length >= 4) thEnterRoom(ji.value); else toast('5 belgili kodni kiriting'); }));
+    body.appendChild(jr);
+    body.appendChild(el('label', 'lbl', 'Ochiq xonalar'));
+    const list = el('div'); body.appendChild(list); list.appendChild(el('div', 'note', '⏳ Yuklanmoqda...'));
+    api('/api/theatre/rooms').then(d => {
+      list.replaceChildren();
+      if (!d.items.length) list.appendChild(el('div', 'note', 'Hozircha xona yo\'q. Birinchi bo\'lib oching!'));
+      d.items.forEach(r => {
+        const b = el('button', 'pl'); b.appendChild(el('div', 'tm', r.locked ? '🔒' : '🌐'));
+        const tx = el('div', 'tx'); tx.appendChild(el('b', '', r.title)); tx.appendChild(el('span', '', '🎬 ' + r.movie + ' · 👤 ' + r.owner));
+        b.append(tx, el('div', 'st', '👁 ' + r.viewers)); b.onclick = () => { haptic(); thEnterRoom(r.id); }; list.appendChild(b);
+      });
+    }).catch(e => { list.replaceChildren(el('div', 'note', errMsg(e))); });
+  }
+  function moviePicker(host, onPick) {
+    const si = el('input', 'inp'); si.type = 'search'; si.placeholder = '🔎 Kino nomi yoki kod...';
+    const sel = el('div'), list = el('div', 'pks'); host.append(si, sel, list);
+    const choose = (id, title) => {
+      onPick(id); sel.replaceChildren(); const s = el('div', 'pksel'); s.appendChild(el('span', '', '🎬 ' + title));
+      s.appendChild(mkBtn('btn2', '✕', () => { onPick(0); sel.replaceChildren(); })); sel.appendChild(s); haptic();
+    };
+    let tm = 0;
+    async function load() {
+      try {
+        const d = await api('/api/movies?limit=10&q=' + encodeURIComponent(si.value.trim())); list.replaceChildren();
+        d.items.forEach(it => {
+          const b = el('button', 'pk', it.title); b.appendChild(el('small', '', (it.year || '') + (it.t === 's' ? ' · qismli' : '')));
+          b.onclick = async () => {
+            if (it.t !== 's') return choose(it.id, it.title + (it.year ? ' (' + it.year + ')' : ''));
+            if (b.nextSibling && b.nextSibling.classList && b.nextSibling.classList.contains('qchips')) { b.nextSibling.remove(); return; }
+            try {
+              const s = await api('/api/series/' + it.id), ch = el('div', 'qchips');
+              (s.eps || []).forEach(ep => ch.appendChild(mkBtn('', ep.ep + '-qism', () => choose(ep.id, it.title + ' · ' + ep.ep + '-qism'))));
+              b.after(ch);
+            } catch (e) { toast(errMsg(e)); }
+          };
+          list.appendChild(b);
+        });
+      } catch (e) {}
+    }
+    si.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(load, 300); });
+    load();
+  }
+  function thCreate(body) {
+    const p = el('div', 'panel'); body.appendChild(p); let movieId = 0, locked = false;
+    p.appendChild(el('label', 'lbl', 'Xona nomi *'));
+    const ti = el('input', 'inp'); ti.placeholder = 'Masalan: Juma kechasi'; ti.maxLength = 40; p.appendChild(ti);
+    p.appendChild(el('label', 'lbl', 'Qaysi kinoni ko\'ramiz? *'));
+    moviePicker(p, id => { movieId = id; });
+    p.appendChild(el('label', 'lbl', 'Kirish'));
+    const ch = el('div', 'qchips'), pw = el('input', 'inp'); pw.placeholder = 'Parol (20 belgigacha)'; pw.maxLength = 20; pw.hidden = true; pw.style.marginTop = '8px';
+    const b1 = mkBtn('on', '🌐 Ochiq', () => set(false)), b2 = mkBtn('', '🔒 Parol bilan', () => set(true));
+    const set = v => { haptic(); locked = v; b1.classList.toggle('on', !v); b2.classList.toggle('on', v); pw.hidden = !v; if (v) pw.focus(); };
+    ch.append(b1, b2); p.append(ch, pw);
+    p.appendChild(el('div', 'note', 'Siz play/pauza/oldinga o\'tkazishni boshqarasiz, qolganlar birga ko\'radi.')).style.marginTop = '10px';
+    const go = mkBtn('btn main full', '🚪 Xonani ochish', async () => {
+      if (ti.value.trim().length < 2) { toast('Xonaga nom bering'); return; }
+      if (!movieId) { toast('Kinoni tanlang'); return; }
+      if (locked && !pw.value.trim()) { toast('Parolni kiriting'); return; }
+      go.disabled = true; go.textContent = '⏳ Tekshirilmoqda...';
+      try {
+        const r = await api('/api/theatre/room', { title: ti.value.trim(), movie_id: movieId, password: locked ? pw.value.trim() : '' });
+        haptic('medium'); thReplace(ti.value.trim(), b => thHall(b, { mode: 'room', room: r.id, host: true }), true);
+      } catch (e) { toast(errMsg(e), 3600); go.disabled = false; go.textContent = '🚪 Xonani ochish'; }
+    });
+    go.style.marginTop = '14px'; p.appendChild(go);
+  }
+
+  /* ── Premyera (admin) ── */
+  async function thPremiere(body) {
+    body.appendChild(el('div', 'note', '⏳ Yuklanmoqda...')); let d;
+    try { d = await api('/api/admin/theatre'); } catch (e) { body.replaceChildren(el('div', 'note', errMsg(e))); return; }
+    body.replaceChildren();
+    const intro = el('div', 'note', 'Premyera ertaga (' + d.day + ') tanlangan vaqtda teatrda chiqadi. Tugagandan keyin kino katalogga qo\'shiladi — shu paytgacha katalogda ko\'rinmaydi.');
+    intro.style.margin = '10px 2px'; body.appendChild(intro);
+    if (d.scheduled.length) {
+      body.appendChild(el('label', 'lbl', 'Rejalashtirilgan'));
+      d.scheduled.forEach(s => {
+        const r = el('div', 'pl'); r.appendChild(el('div', 'tm', s.time));
+        const tx = el('div', 'tx'); tx.appendChild(el('b', '', s.title)); tx.appendChild(el('span', '', s.day)); r.appendChild(tx);
+        if (!s.started) r.appendChild(mkBtn('btn2', 'Bekor', async () => { try { await api('/api/admin/theatre/cancel', { movie_id: s.id }); toast('Bekor qilindi'); thRender(); } catch (e) { toast(errMsg(e)); } }));
+        else r.appendChild(el('div', 'st', '🔴'));
+        body.appendChild(r);
+      });
+    }
+    body.appendChild(el('label', 'lbl', 'Kutilayotgan kinolar (premyera qilish mumkin)'));
+    if (!d.pending.length) body.appendChild(el('div', 'note', 'Kutilayotgan yakka kino yo\'q. Kinoni «Qo\'shish» bo\'limida premyera qilib ham qo\'shishingiz mumkin.'));
+    const taken = new Set(d.scheduled.filter(s => s.day === d.day).map(s => s.time));
+    d.pending.forEach(mv => {
+      const b = el('button', 'pk', mv.title); b.appendChild(el('small', '', mv.year || ''));
+      b.onclick = () => {
+        if (b.nextSibling && b.nextSibling.classList && b.nextSibling.classList.contains('qchips')) { b.nextSibling.remove(); return; }
+        if (!d.ready) { toast('Teatr ulanmagan'); return; }
+        const ch = el('div', 'qchips');
+        d.slots.forEach(s => {
+          const c = mkBtn('', s.time, async () => {
+            if (!confirm('«' + mv.title + '» ertaga ' + s.time + ' da premyera bo\'lsinmi?')) return;
+            c.disabled = true;
+            try { await api('/api/admin/theatre/premiere', { movie_id: mv.id, idx: s.idx }); haptic('medium'); toast('⭐ Premyera belgilandi'); thRender(); }
+            catch (e) { toast(errMsg(e), 3800); c.disabled = false; }
+          });
+          if (taken.has(s.time)) c.disabled = true; ch.appendChild(c);
+        });
+        b.after(ch);
+      };
+      body.appendChild(b);
+    });
+  }
+  $('#thBack').onclick = thBack;
+  $('#thBtn').onclick = thOpen;
+
   /* ───────── Boshlash ───────── */
   async function init() {
     if (!initData) {
@@ -1757,6 +2251,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       applyTheme(me.theme);
       S.favs = new Set(me.favs);
       CH.uid = me.uid; CH.staff = !!me.admin; CH.contact = me.contact || '';
+      TH.on = !!me.theatre; $('#thBtn').hidden = !(TH.on || me.admin);
             if (me.admin) { ME = Object.assign(ME, me); $('#gear').hidden = false; applyTabs(); }
     } catch (e) {}
     try {
