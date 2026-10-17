@@ -46,6 +46,7 @@ _prog: dict[int, int] = {}   # yuklanayotgan kino: foiz
 _presence: dict[str, dict[int, float]] = {}
 _pw_tries: dict[tuple, list] = {}
 _meta_lock = asyncio.Lock()
+_enabled = True  # Sozlamalardagi «Teatr» tugmasi (o'chiq bo'lsa hech kimga ko'rinmaydi)
 
 
 # ───────────── MTProto mijoz ─────────────
@@ -64,7 +65,8 @@ async def start() -> bool:
                         bot_token=config.BOT_TOKEN, in_memory=True, no_updates=True)
         await client.start()
         _client = client
-        log.info("Teatr: MTProto ulandi.")
+        set_enabled((await db.get_setting("theatre_on", "1")) == "1")
+        log.info("Teatr: MTProto ulandi (%s).", "yoqilgan" if _enabled else "sozlamada o'chirilgan")
         return True
     except Exception:
         log.exception("Teatr: MTProto ulanmadi (kutubxona o'rnatilganini va API_ID/API_HASH ni tekshiring)")
@@ -86,6 +88,20 @@ async def stop() -> None:
 
 def available() -> bool:
     return _client is not None
+
+
+def enabled() -> bool:
+    return _enabled
+
+
+def set_enabled(v: bool) -> None:
+    global _enabled
+    _enabled = bool(v)
+
+
+def is_on() -> bool:
+    """Teatr foydalanuvchilarga ochiqmi: ulangan VA sozlamada yoqilgan."""
+    return _enabled and _client is not None
 
 
 # ───────────── Vaqt ─────────────
@@ -223,9 +239,18 @@ def _pick(pool, n: int, soft_avoid: set, hard_avoid: set) -> list[int]:
 
 
 async def _next_ep(sid: int, last: int):
-    return await db.q_one(
-        f"SELECT m.id, m.ep FROM movies m WHERE m.series_id=? AND m.ep>? AND {ELIG} ORDER BY m.ep LIMIT 1",
-        (sid, last))
+    """Serialning KEYINGI qismi — qat'iy tartibda (eng kichik raqamdan). Hajmi noma'lum qismning
+    ma'lumoti shu zahoti aniqlanadi; faqat formati mos kelmaydigan (mp4 emas) qism o'tkazib yuboriladi."""
+    rows = await db.q_all(
+        "SELECT * FROM movies WHERE series_id=? AND ep>? AND status='live' ORDER BY ep", (sid, last))
+    for r in rows:
+        if r["file_size"] > 0:
+            ok = mime_ok(r["mime"]) and (r["duration"] == 0 or r["duration"] <= 7200)
+        else:
+            ok = await ensure_meta(r)
+        if ok:
+            return r
+    return None
 
 
 async def _recent_ids(day: str, days: int = 10) -> set:
@@ -257,13 +282,16 @@ async def _build(day: str) -> list[tuple[int, int, str]]:
     ep_row = await _next_ep(sid, last) if sid else None
     if not ep_row:
         cands = await db.q_all(
-            f"SELECT DISTINCT m.series_id AS sid FROM movies m JOIN series s ON s.id=m.series_id "
-            f"WHERE s.kind='serial' AND m.series_id IS NOT NULL AND {ELIG}")
+            "SELECT DISTINCT m.series_id AS sid FROM movies m JOIN series s ON s.id=m.series_id "
+            "WHERE s.kind='serial' AND m.series_id IS NOT NULL AND m.status='live'")
         ids = [r["sid"] for r in cands if r["sid"] != sid] or [r["sid"] for r in cands]
-        if ids:
-            sid = random.choice(ids)
-            ep_row = await _next_ep(sid, 0)
-            st = {"sid": sid, "last_ep": 0, "slot": st.get("slot", random.randrange(SLOTS))}
+        random.shuffle(ids)  # serial tasodifiy, lekin qismi — doim 1-qismdan
+        for cand in ids:
+            ep_row = await _next_ep(cand, 0)
+            if ep_row:
+                sid = cand
+                st = {"sid": sid, "last_ep": 0, "slot": st.get("slot", random.randrange(SLOTS))}
+                break
     if ep_row:
         pref = int(st.get("slot", random.randrange(SLOTS)))
         idx = _free_near(slots, min(max(pref, 0), SLOTS - 1))
@@ -299,6 +327,15 @@ async def _build(day: str) -> list[tuple[int, int, str]]:
             slots[idx] = (mid, "film")
 
     return [(i, m, t) for i, (m, t) in sorted(slots.items())]
+
+
+async def rebuild_today() -> int:
+    """Admin: serialni qaytadan (1-qismdan) boshlab, bugungi rejani qayta tuzadi."""
+    await db.set_setting("th_serial", "{}")
+    day = day_of(time.time())
+    async with _plan_lock:
+        await db.q_run("DELETE FROM theatre_slots WHERE day=?", (day,))
+    return len(await plan_day(day))
 
 
 async def plan_day(day: str) -> list:
@@ -481,6 +518,8 @@ async def _tick(bot) -> None:
         until = (st["opens"] if st["phase"] == "closed" else nxt["start"]) - now
         if until <= PREFETCH_BEFORE:
             keep.add(nxt["movie"]["id"])
+    if not _enabled:  # o'chirilgan: hech narsa yuklanmaydi, disk bo'shatiladi
+        keep = set()
     for f in CACHE_DIR.glob("*.mp4"):
         try:
             if int(f.stem) not in keep:
@@ -490,14 +529,14 @@ async def _tick(bot) -> None:
     for mid, task in list(_dl.items()):
         if mid not in keep:
             task.cancel()
-    if available():
+    if available() and _enabled:
         for mid in keep:
             _prefetch(mid)
 
     await _finish_premieres(bot, now)
 
     # hajmi noma'lum kinolarni asta-sekin aniqlab boramiz (kuniga reja tuzilishi uchun)
-    if available() and not _dl:
+    if available() and _enabled and not _dl:
         for r in await db.q_all(
                 "SELECT * FROM movies WHERE file_size=0 AND status IN ('live','premiere') ORDER BY id DESC LIMIT 2"):
             await ensure_meta(r)

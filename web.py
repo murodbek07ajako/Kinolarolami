@@ -19,7 +19,7 @@ import perms
 import services as svc
 import theatre
 
-SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1"}
+SETTING_DEFAULTS = {"protect_content": "0", "sub_required": "1", "theatre_on": "1"}
 THEMES = ("default", "newyear", "ramadan", "navruz")  # dizayn rejimlari
 
 
@@ -190,7 +190,8 @@ async def api_me(request: web.Request):
         "theme": await _theme(),
         "favs": await db.fav_ids(user["id"]),
         "uid": user["id"],
-        "theatre": theatre.available(),
+        "theatre": theatre.is_on(),
+        "theatre_ready": theatre.available(),
         "admin": perms.is_staff(user["id"]),
         "contact": _contact_link(),
         **perms.info(user["id"]),
@@ -367,6 +368,8 @@ async def api_admin_setting(request: web.Request):
     if key not in SETTING_DEFAULTS:
         return _bad("Noma'lum sozlama")
     await db.set_setting(key, "1" if body.get("value") else "0")
+    if key == "theatre_on":
+        theatre.set_enabled(bool(body.get("value")))
     return web.json_response({"ok": True})
 
 
@@ -890,6 +893,8 @@ TH_CHAT_MAX = 300
 def _th_on() -> None:
     if not theatre.available():
         raise web.HTTPServiceUnavailable(reason="Teatr hali ulanmagan")
+    if not theatre.enabled():
+        raise web.HTTPServiceUnavailable(reason="Teatr hozircha yopiq")
 
 
 def _auth_q(request: web.Request) -> dict:
@@ -964,6 +969,7 @@ def _th_chat_item(r, viewer_id: int) -> dict:
 
 
 async def api_th_chat_list(request: web.Request):
+    _th_on()
     user = _auth(request)
     key = await _th_chat_room(user, request.query.get("room", "pub"), False)
     if key is None:
@@ -974,6 +980,7 @@ async def api_th_chat_list(request: web.Request):
 
 
 async def api_th_chat_send(request: web.Request):
+    _th_on()
     user = _auth(request)
     if await db.is_banned(user["id"]):
         raise web.HTTPForbidden(reason="Siz chatga yoza olmaysiz")
@@ -1141,6 +1148,14 @@ async def api_admin_th_premiere(request: web.Request):
     return web.json_response({"ok": True})
 
 
+async def api_admin_th_rebuild(request: web.Request):
+    _admin(request, "publish")
+    if not theatre.available():
+        return _bad("Teatr ulanmagan")
+    n = await theatre.rebuild_today()
+    return web.json_response({"ok": True, "slots": n})
+
+
 async def api_admin_th_cancel(request: web.Request):
     user = _admin(request, "publish")
     body = await request.json()
@@ -1188,6 +1203,7 @@ def make_app(bot) -> web.Application:
     r.add_get("/api/admin/theatre", api_admin_th)
     r.add_post("/api/admin/theatre/premiere", api_admin_th_premiere)
     r.add_post("/api/admin/theatre/cancel", api_admin_th_cancel)
+    r.add_post("/api/admin/theatre/rebuild", api_admin_th_rebuild)
     r.add_post("/api/send", api_send)
     r.add_post("/api/fav", api_fav)
     r.add_get(r"/api/poster/{id:\d+}", api_poster)

@@ -1550,6 +1550,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     };
     toggle('🔒', 'Kontentni himoyalash', 'Forward va saqlashni taqiqlash', 'protect_content');
     toggle('📢', 'Majburiy obuna', 'Kanallarga obuna bo\'lmaguncha kino yuborilmaydi', 'sub_required');
+    if (ME.theatre_ready) toggle('🎭', 'Teatr', 'O\'chirilsa hech kimga ko\'rinmaydi va server video yuklamaydi', 'theatre_on');
     if (can('settings')) wrap.appendChild(general);
 
     if (can('settings')) {
@@ -1910,7 +1911,14 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
     }).catch(() => {});
     body.appendChild(mkBtn('thlink', '📅 Bugungi reja', thPlan));
     card('🏠', 'O\'z xonam', 'Do\'stlar bilan ochiq yoki parolli xona oching', () => thGo('🏠 Xonalar', thRooms));
-    if (ME && ME.admin && can('publish')) card('⭐', 'Premyera (admin)', 'Kinoni ertaga teatrda birinchi bo\'lib ko\'rsating', () => thGo('⭐ Premyera', thPremiere));
+    if (ME && ME.admin && can('publish')) {
+      card('⭐', 'Premyera (admin)', 'Kinoni ertaga teatrda birinchi bo\'lib ko\'rsating', () => thGo('⭐ Premyera', thPremiere));
+      body.appendChild(mkBtn('thlink', '🔄 Rejani qayta tuzish (serial 1-qismdan)', async () => {
+        if (!confirm('Bugungi reja qayta tuziladi va serial 1-qismdan boshlanadi. Davom etilsinmi?')) return;
+        try { const r = await api('/api/admin/theatre/rebuild', {}); haptic('medium'); toast('✅ Reja qayta tuzildi (' + r.slots + ' slot)', 2600); }
+        catch (e) { toast(errMsg(e), 3200); }
+      }));
+    }
   }
 
   async function thPlan() {
@@ -2270,7 +2278,7 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.4}
       applyTheme(me.theme);
       S.favs = new Set(me.favs);
       CH.uid = me.uid; CH.staff = !!me.admin; CH.contact = me.contact || '';
-      TH.on = !!me.theatre; $('#thBtn').hidden = !(TH.on || me.admin);
+      TH.on = !!me.theatre; $('#thBtn').hidden = !TH.on;
             if (me.admin) { ME = Object.assign(ME, me); $('#gear').hidden = false; applyTabs(); }
     } catch (e) {}
     try {
